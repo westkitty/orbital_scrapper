@@ -1,4 +1,4 @@
-name: Phase 0 Runtime Gate
+name: Phase 0 Regression Gate
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  verify-phase0:
+  verify-phase0-regression:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -28,5 +28,5 @@ jobs:
       - name: Verify resolved core versions
         run: npm ls three @dimforge/rapier3d-compat vite typescript
 
-      - name: Run Phase 0 gate
-        run: npm run verify:phase0
+      - name: Run Phase 0 regression gate
+        run: npm run verify:phase0-regression
