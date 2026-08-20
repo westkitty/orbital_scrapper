@@ -14,6 +14,7 @@
     "test:phase1": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/test/fixedStepLoop.test.js .test-dist/test/flightInputBindings.test.js .test-dist/test/flightSandbox.test.js .test-dist/test/flightScenePresenter.test.js .test-dist/test/inputBindings.test.js .test-dist/test/physicsSandbox.test.js .test-dist/test/scenePresenter.test.js",
     "test:phase2": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/test/fixedStepLoop.test.js .test-dist/test/flightInputBindings.test.js .test-dist/test/flightSandbox.test.js .test-dist/test/flightScenePresenter.test.js .test-dist/test/inputBindings.test.js .test-dist/test/physicsSandbox.test.js .test-dist/test/scenePresenter.test.js .test-dist/test/wreckSandbox.test.js .test-dist/test/wreckScenePresenter.test.js",
     "test:phase3": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/test/cuttingSystem.test.js .test-dist/test/fixedStepLoop.test.js .test-dist/test/flightInputBindings.test.js .test-dist/test/flightSandbox.test.js .test-dist/test/flightScenePresenter.test.js .test-dist/test/inputBindings.test.js .test-dist/test/physicsSandbox.test.js .test-dist/test/scenePresenter.test.js .test-dist/test/wreckSandbox.test.js .test-dist/test/wreckScenePresenter.test.js",
+    "test:phase4": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/test/cuttingSystem.test.js .test-dist/test/fixedStepLoop.test.js .test-dist/test/flightInputBindings.test.js .test-dist/test/flightSandbox.test.js .test-dist/test/flightScenePresenter.test.js .test-dist/test/inputBindings.test.js .test-dist/test/physicsSandbox.test.js .test-dist/test/scenePresenter.test.js .test-dist/test/tetherSystem.test.js .test-dist/test/wreckSandbox.test.js .test-dist/test/wreckScenePresenter.test.js",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4173",
     "smoke:phase1": "node scripts/phase1-smoke.mjs",
@@ -28,7 +29,8 @@
     "verify:phase2-regression": "npm run test:phase2 && npm run build",
     "verify:phase3": "npm run verify:phase3-regression",
     "verify:phase3-regression": "npm run test:phase3 && npm run build",
-    "verify:phase4": "npm run test && npm run build && npm run smoke:phase4"
+    "verify:phase4": "npm run verify:phase4-regression",
+    "verify:phase4-regression": "npm run test:phase4 && npm run build"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.19.3",
