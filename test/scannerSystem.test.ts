@@ -70,6 +70,29 @@ test("scanner distinguishes safe alternate path, low-mass bridge, and high-mass 
   }
 });
 
+test("scanner attributes a later bridge cut to its own endpoint section after an unrelated component is already detached", async () => {
+  const sandbox = await WreckSandbox.create();
+  const graph = new StructuralGraph();
+  const scanner = new ScannerSystem();
+  try {
+    syncGraph(graph, sandbox);
+    assert.equal(sandbox.severConnection("spine-engine").severed, true);
+    syncGraph(graph, sandbox);
+    assert.deepEqual(graph.getConnectedSection("engine"), ["engine"]);
+
+    const panel = scanner.analyzeConnection(sandbox, graph, "spine-panel");
+    assert.ok(panel);
+    assert.deepEqual(panel.likelyFreeComponentIds, ["panel"]);
+    assert.equal(panel.displayComponentId, "panel");
+    assert.equal(panel.componentType, "panel");
+    assert.equal(panel.massClass, "light");
+    assert.equal(panel.placeholderValueUnits, 250);
+    assert.equal(panel.riskLevel, "moderate");
+  } finally {
+    sandbox.dispose();
+  }
+});
+
 test("scanner target acquisition follows a current aimed connection and exposes relationship identity", async () => {
   const sandbox = await WreckSandbox.create();
   const graph = new StructuralGraph();
