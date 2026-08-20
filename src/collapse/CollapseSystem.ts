@@ -7,7 +7,7 @@ type Vec3 = { x: number; y: number; z: number };
 
 export const MAX_HULL_INTEGRITY = 100;
 export const HULL_DAMAGE_IMPULSE_THRESHOLD = 1.5;
-export const HULL_DAMAGE_PER_IMPULSE = 12;
+export const HULL_DAMAGE_PER_IMPULSE = 20;
 export const COLLAPSE_THREAT_RANGE_METERS = 20;
 
 export type CollapseSeverityState = "stable" | "elevated" | "danger" | "critical" | "destroyed";
@@ -94,6 +94,7 @@ export class CollapseSystem {
   private lastImpactDamage = 0;
   private readonly secondaryBreakIds = new Set<string>();
   private lastSecondaryBreakId: string | null = null;
+  private secondaryBreakThisStep = false;
 
   reset(): void {
     this.hullIntegrity = MAX_HULL_INTEGRITY;
@@ -108,16 +109,18 @@ export class CollapseSystem {
     this.lastImpactDamage = 0;
     this.secondaryBreakIds.clear();
     this.lastSecondaryBreakId = null;
+    this.secondaryBreakThisStep = false;
   }
 
   step(sandbox: WreckSandbox, graph: StructuralGraph): void {
+    this.secondaryBreakThisStep = false;
     const impact = this.processContactEvents(sandbox);
     this.highestThreat = this.findHighestThreat(sandbox);
 
     const impactScore = impact
       ? clamp((impact.impulse - HULL_DAMAGE_IMPULSE_THRESHOLD) * 8, 0, 85)
       : 0;
-    const secondaryBreakScore = this.lastSecondaryBreakId && this.secondaryBreakIds.has(this.lastSecondaryBreakId) ? 55 : 0;
+    const secondaryBreakScore = this.secondaryBreakThisStep ? 55 : 0;
     const threatScore = this.highestThreat?.score ?? 0;
 
     this.severityScore = clamp(Math.max(threatScore, impactScore, secondaryBreakScore), 0, 100);
@@ -221,6 +224,7 @@ export class CollapseSystem {
     if (!result.severed) return;
     this.secondaryBreakIds.add(candidate.id);
     this.lastSecondaryBreakId = candidate.id;
+    this.secondaryBreakThisStep = true;
   }
 
   private findHighestThreat(sandbox: WreckSandbox): ThreatRecord | null {
