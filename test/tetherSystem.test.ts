@@ -51,6 +51,21 @@ test("tether attaches to a physical component, develops bounded tension, and rel
   }
 });
 
+test("held tether prioritizes the recorded salvage side of a completed cut", async () => {
+  const sandbox = await WreckSandbox.create();
+  const tether = new TetherSystem();
+  try {
+    placeCraft(sandbox, 0, 6);
+    assert.equal(sandbox.severConnection("spine-panel").severed, true);
+    tether.step(sandbox, true);
+    const diagnostics = tether.getDiagnostics(sandbox);
+    assert.equal(diagnostics.state, "attached");
+    assert.equal(diagnostics.targetId, "panel");
+  } finally {
+    sandbox.dispose();
+  }
+});
+
 test("tether winch pulls a detached panel toward the craft without transform movement", async () => {
   const sandbox = await WreckSandbox.create();
   const tether = new TetherSystem();

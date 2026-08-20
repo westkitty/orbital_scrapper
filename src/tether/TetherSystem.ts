@@ -218,10 +218,11 @@ export class TetherSystem {
     const craft = sandbox.getCraftBody();
     const craftPosition = craft.translation();
     const forward = rotateLocalVector(craft.rotation(), { x: 0, y: 0, z: -1 });
-    const recentlySevered = new Set<string>();
+    const severedSalvageSides = new Set<string>();
     for (const severed of sandbox.getSeveredConnections()) {
-      recentlySevered.add(severed.componentAId);
-      recentlySevered.add(severed.componentBId);
+      // Phase 3 defines component B as the removable side of each designated cut fixture.
+      // Favor that recorded side without inferring a structural graph, which remains Phase 5 work.
+      severedSalvageSides.add(severed.componentBId);
     }
 
     let best: TetherCandidate | null = null;
@@ -230,9 +231,9 @@ export class TetherSystem {
       const delta = subtract(position, craftPosition);
       const distance = magnitude(delta);
       const aimAlignment = distance > 1e-9 ? dot(forward, delta) / distance : 1;
-      const detachedBias = recentlySevered.has(component.id) ? 0.2 : 0;
+      const severedSalvageBias = severedSalvageSides.has(component.id) ? 0.45 : 0;
       const lightBias = component.massClass === "light" ? 0.015 : 0;
-      const score = aimAlignment + detachedBias + lightBias - distance * 0.002;
+      const score = aimAlignment + severedSalvageBias + lightBias - distance * 0.002;
       const candidate = { component, distance, aimAlignment, score };
       if (!best || candidate.score > best.score) best = candidate;
     }
