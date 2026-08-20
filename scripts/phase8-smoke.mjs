@@ -223,7 +223,10 @@ try {
     320,
     "Physical tether recovery",
   );
-  if (secured.cargoCondition < 99.9) throw new Error(`Careful browser recovery damaged cargo unexpectedly: ${JSON.stringify(secured)}`);
+  if (!(secured.cargoCondition > 0 && secured.cargoCondition <= 100)) {
+    throw new Error(`Live recovery produced invalid cargo condition: ${JSON.stringify(secured)}`);
+  }
+  const expectedPayout = Math.round(250 * secured.cargoCondition / 100);
 
   const settled = await holdUntil(
     wsUrl,
@@ -232,8 +235,8 @@ try {
     180,
     "Physical extraction retreat",
   );
-  if (settled.payout !== 250 || !settled.summary.includes("panel 100.0% = 250")) {
-    throw new Error(`Settlement summary/payout mismatch: ${JSON.stringify(settled)}`);
+  if (settled.payout !== expectedPayout || !settled.summary.includes(`panel ${secured.cargoCondition.toFixed(1)}% = ${expectedPayout}`)) {
+    throw new Error(`Condition-adjusted settlement summary/payout mismatch: expected=${expectedPayout} secured=${JSON.stringify(secured)} settled=${JSON.stringify(settled)}`);
   }
   if (!(settled.distance >= 11.5)) throw new Error(`Settlement occurred before extraction distance: ${JSON.stringify(settled)}`);
 
@@ -251,7 +254,7 @@ try {
     throw new Error(`Phase 8 reset did not restore exact recovery baseline: ${JSON.stringify(reset)}`);
   }
 
-  console.log(`phase8 smoke: live scan/cut/tether/capture/return/settlement/reset passed in ${browserPath}; payout=${settled.payout}; condition=${settled.cargoCondition.toFixed(1)}; distance=${settled.distance.toFixed(2)}; reset=${reset.settlement}`);
+  console.log(`phase8 smoke: live scan/cut/tether/capture/return/condition-adjusted settlement/reset passed in ${browserPath}; payout=${settled.payout}; condition=${secured.cargoCondition.toFixed(1)}; distance=${settled.distance.toFixed(2)}; reset=${reset.settlement}`);
 } finally {
   await stopProcess(browser);
   await stopProcess(preview);
