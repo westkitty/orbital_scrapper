@@ -44,7 +44,8 @@
     "verify:phase6-regression": "npm run test:phase6 && npm run build",
     "verify:phase7": "npm run verify:phase7-regression",
     "verify:phase7-regression": "npm run test:phase7 && npm run build",
-    "verify:phase8": "npm run test && npm run build && npm run smoke:phase8"
+    "verify:phase8": "npm run verify:phase8-regression",
+    "verify:phase8-regression": "npm run test && npm run build"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.19.3",
