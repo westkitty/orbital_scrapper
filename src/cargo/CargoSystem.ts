@@ -17,6 +17,10 @@ const CARGO_BASE_VALUE_BY_TYPE: Readonly<Record<WreckComponentType, number>> = O
   junction: 600,
 });
 
+export type CargoSystemOptions = {
+  maxCaptureRelativeSpeed?: number;
+};
+
 export type CargoCaptureState = "idle" | "tracking" | "blocked-speed" | "secured";
 export type CargoSettlementState = "field" | "returning" | "settled";
 
@@ -64,6 +68,10 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
+function validPositive(value: number): boolean {
+  return Number.isFinite(value) && value > 0;
+}
+
 export class CargoSystem {
   private readonly conditions = new Map<string, number>();
   private readonly securedCargo = new Map<string, SecuredCargoRecord>();
@@ -76,6 +84,18 @@ export class CargoSystem {
   private lastConditionDamage = 0;
   private settlementState: CargoSettlementState = "field";
   private payoutUnits = 0;
+  private maxCaptureRelativeSpeed: number;
+
+  constructor(options: CargoSystemOptions = {}) {
+    const configured = options.maxCaptureRelativeSpeed ?? CARGO_MAX_RELATIVE_SPEED_METERS_PER_SECOND;
+    if (!validPositive(configured)) throw new Error("Cargo max capture relative speed must be positive and finite");
+    this.maxCaptureRelativeSpeed = configured;
+  }
+
+  setMaxCaptureRelativeSpeed(value: number): void {
+    if (!validPositive(value)) throw new Error("Cargo max capture relative speed must be positive and finite");
+    this.maxCaptureRelativeSpeed = value;
+  }
 
   reset(): void {
     this.conditions.clear();
@@ -120,7 +140,7 @@ export class CargoSystem {
       candidateDistance: this.candidateDistance,
       candidateRelativeSpeed: this.candidateRelativeSpeed,
       captureRadiusMeters: CARGO_CAPTURE_RADIUS_METERS,
-      maxCaptureRelativeSpeed: CARGO_MAX_RELATIVE_SPEED_METERS_PER_SECOND,
+      maxCaptureRelativeSpeed: this.maxCaptureRelativeSpeed,
       securedCargoCount: settlementItems.length,
       securedCargoIds: settlementItems.map((cargo) => cargo.componentId),
       candidateCondition: condition,
@@ -175,7 +195,7 @@ export class CargoSystem {
     this.captureState = "tracking";
 
     if (distance > CARGO_CAPTURE_RADIUS_METERS) return null;
-    if (relativeSpeed > CARGO_MAX_RELATIVE_SPEED_METERS_PER_SECOND) {
+    if (relativeSpeed > this.maxCaptureRelativeSpeed) {
       this.captureState = "blocked-speed";
       return null;
     }
