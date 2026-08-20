@@ -1,6 +1,7 @@
 // @ts-nocheck
 import * as THREE from "three";
 import "./style.css";
+import { CuttingSystem, CUTTER_AIM_COSINE, CUTTER_RANGE_METERS } from "./cutting/CuttingSystem.js";
 import { FlightController } from "./flight/FlightController.js";
 import { WreckSandbox } from "./physics/WreckSandbox.js";
 import { FIXED_TIMESTEP_SECONDS } from "./physics/PhysicsSandbox.js";
@@ -12,38 +13,48 @@ const app = document.querySelector("#app");
 if (!app) throw new Error("Missing #app root");
 
 app.innerHTML = `
-  <section class="viewport" aria-label="Phase 2 modular wreck physics viewport"></section>
-  <aside class="panel" aria-label="Phase 2 wreck controls and diagnostics">
-    <p class="eyebrow">ORBITAL SCRAPPER // PHASE 2</p>
-    <h1>Modular Wreck Physics</h1>
-    <p class="copy">Six dynamic wreck modules are joined by explicit Rapier constraints. The rear junction has two physical load paths back to the spine.</p>
+  <section class="viewport" aria-label="Phase 3 cutting and physical separation viewport"></section>
+  <aside class="panel" aria-label="Phase 3 cutter controls and diagnostics">
+    <p class="eyebrow">ORBITAL SCRAPPER // PHASE 3</p>
+    <h1>Cutting & Physical Separation</h1>
+    <p class="copy">Aim the craft at a designated joint, hold the cutter in range, and sever the real Rapier constraint. Components remain physical after separation.</p>
 
-    <div class="control-grid" aria-label="Flight controls">
+    <div class="control-grid" aria-label="Flight and cutter controls">
       <div><strong>Thrust</strong><span><kbd>W</kbd>/<kbd>S</kbd></span></div>
       <div><strong>Strafe</strong><span><kbd>A</kbd>/<kbd>D</kbd></span></div>
       <div><strong>Vertical</strong><span><kbd>R</kbd>/<kbd>F</kbd></span></div>
       <div><strong>Pitch / yaw</strong><span><kbd>↑↓</kbd> <kbd>←→</kbd></span></div>
       <div><strong>Roll</strong><span><kbd>Q</kbd>/<kbd>E</kbd></span></div>
       <div><strong>Brake</strong><span><kbd>Space</kbd></span></div>
+      <div><strong>Cutter</strong><span><kbd>C</kbd> hold</span></div>
     </div>
 
     <button id="reset" type="button">Reset wreck scene <kbd>X</kbd></button>
 
     <dl class="diagnostics">
       <div><dt>Speed</dt><dd id="diag-speed">—</dd></div>
-      <div><dt>Angular speed</dt><dd id="diag-angular-speed">—</dd></div>
       <div><dt>Wreck distance</dt><dd id="diag-distance">—</dd></div>
       <div><dt>Position</dt><dd id="diag-position">—</dd></div>
       <div><dt>Wreck modules</dt><dd id="diag-components">—</dd></div>
-      <div><dt>Structural joints</dt><dd id="diag-connections">—</dd></div>
+      <div><dt>Live joints</dt><dd id="diag-connections">—</dd></div>
+      <div><dt>Cuttable joints</dt><dd id="diag-cuttable">—</dd></div>
+      <div><dt>Severed joints</dt><dd id="diag-severed">—</dd></div>
+      <div><dt>Cut target</dt><dd id="diag-cut-target">—</dd></div>
+      <div><dt>Cut class</dt><dd id="diag-cut-class">—</dd></div>
+      <div><dt>Target range</dt><dd id="diag-cut-range">—</dd></div>
+      <div><dt>Aim</dt><dd id="diag-cut-aim">—</dd></div>
+      <div><dt>Cutter state</dt><dd id="diag-cut-state">—</dd></div>
+      <div><dt>Cut progress</dt><dd id="diag-cut-progress">—</dd></div>
+      <div><dt>Last cut</dt><dd id="diag-last-cut">—</dd></div>
+      <div><dt>Separation</dt><dd id="diag-cut-separation">—</dd></div>
       <div><dt>Max joint error</dt><dd id="diag-joint-error">—</dd></div>
       <div><dt>Rigid bodies</dt><dd id="diag-bodies">—</dd></div>
       <div><dt>Fixed step</dt><dd id="diag-step">—</dd></div>
       <div><dt>Input</dt><dd id="diag-input">neutral</dd></div>
     </dl>
 
-    <p class="course" id="course">Approach the wreck under control. The orange engine is heavy; the green panel is light; the twin rear rails form alternate structural paths.</p>
-    <p class="status" id="status" role="status">Initializing modular wreck scene…</p>
+    <p class="course" id="course">The green panel joint is the low-risk cut. The orange engine joint is the large-mass cut. Aim with the craft and hold <kbd>C</kbd>.</p>
+    <p class="status" id="status" role="status">Initializing cutter scene…</p>
   </aside>
 `;
 
@@ -77,9 +88,16 @@ referenceGrid.position.y = -5;
 scene.add(referenceGrid);
 const axesHelper = new THREE.AxesHelper(3);
 scene.add(axesHelper);
+const cutMarker = new THREE.Mesh(
+  new THREE.SphereGeometry(0.24, 12, 8),
+  new THREE.MeshBasicMaterial({ color: 0xfacc15, wireframe: true }),
+);
+cutMarker.visible = false;
+scene.add(cutMarker);
 
 const sandbox = await WreckSandbox.create();
 const controller = new FlightController();
+const cutter = new CuttingSystem();
 const presenter = new FlightScenePresenter(scene);
 presenter.rebuild(sandbox);
 const loop = new FixedStepLoop(FIXED_TIMESTEP_SECONDS, 5);
@@ -89,6 +107,7 @@ let disposed = false;
 
 function resetScene() {
   sandbox.reset();
+  cutter.reset();
   loop.reset();
   input.clear();
   presenter.rebuild(sandbox);
@@ -108,7 +127,7 @@ function resize() {
 }
 window.addEventListener("resize", resize);
 
-function describeInput(state) {
+function describeInput(state, cutActive) {
   const active = [];
   if (state.forward > 0) active.push("forward");
   if (state.forward < 0) active.push("reverse");
@@ -120,34 +139,73 @@ function describeInput(state) {
   if (state.yaw !== 0) active.push("yaw");
   if (state.roll !== 0) active.push("roll");
   if (state.brake) active.push("brake");
+  if (cutActive) active.push("cut");
   return active.length ? active.join(" + ") : "neutral";
+}
+
+function updateCutMarker(cut) {
+  if (!cut.targetId || !sandbox.hasConnection(cut.targetId)) {
+    cutMarker.visible = false;
+    return;
+  }
+  const point = sandbox.getConnectionWorldPoint(cut.targetId);
+  cutMarker.visible = true;
+  cutMarker.position.set(point.x, point.y, point.z);
 }
 
 function updateDiagnostics() {
   const diagnostics = sandbox.getDiagnostics();
-  const state = input?.getState?.() ?? { forward: 0, strafe: 0, vertical: 0, pitch: 0, yaw: 0, roll: 0, brake: false };
+  const cut = cutter.getDiagnostics(sandbox);
+  const flightState = input?.getState?.() ?? { forward: 0, strafe: 0, vertical: 0, pitch: 0, yaw: 0, roll: 0, brake: false };
+  const cutActive = input?.isCutActive?.() ?? false;
 
   document.querySelector("#diag-speed").textContent = `${diagnostics.linearSpeed.toFixed(2)} m/s`;
-  document.querySelector("#diag-angular-speed").textContent = `${diagnostics.angularSpeed.toFixed(2)} rad/s`;
   document.querySelector("#diag-distance").textContent = `${diagnostics.distanceToWreck.toFixed(2)} m`;
   document.querySelector("#diag-position").textContent = `${diagnostics.position.x.toFixed(1)}, ${diagnostics.position.y.toFixed(1)}, ${diagnostics.position.z.toFixed(1)}`;
   document.querySelector("#diag-components").textContent = String(diagnostics.wreckComponentCount);
   document.querySelector("#diag-connections").textContent = String(diagnostics.wreckConnectionCount);
+  document.querySelector("#diag-cuttable").textContent = String(diagnostics.wreckCuttableConnectionCount);
+  document.querySelector("#diag-severed").textContent = String(diagnostics.wreckSeveredConnectionCount);
+  document.querySelector("#diag-cut-target").textContent = cut.targetId ?? "none";
+  document.querySelector("#diag-cut-class").textContent = cut.targetClass ?? "none";
+  document.querySelector("#diag-cut-range").textContent = Number.isFinite(cut.targetDistance) ? `${cut.targetDistance.toFixed(2)} m` : "—";
+  document.querySelector("#diag-cut-aim").textContent = Number.isFinite(cut.aimAlignment) ? cut.aimAlignment.toFixed(3) : "—";
+  document.querySelector("#diag-cut-state").textContent = cut.state;
+  document.querySelector("#diag-cut-progress").textContent = `${Math.round(cut.progress01 * 100)}%`;
+  document.querySelector("#diag-last-cut").textContent = cut.lastCompletedConnectionId ?? "none";
+  document.querySelector("#diag-cut-separation").textContent = `${cut.lastSeparationDistance.toFixed(3)} m`;
   document.querySelector("#diag-joint-error").textContent = `${(diagnostics.maxConnectionError * 1000).toFixed(2)} mm`;
   document.querySelector("#diag-bodies").textContent = String(diagnostics.activeBodies);
   document.querySelector("#diag-step").textContent = `${(diagnostics.fixedTimestepSeconds * 1000).toFixed(2)} ms`;
-  document.querySelector("#diag-input").textContent = describeInput(state);
+  document.querySelector("#diag-input").textContent = describeInput(flightState, cutActive);
 
-  if (diagnostics.distanceToWreck > 10) course.textContent = "Approach the intact wreck. Preserve enough stopping distance to avoid a high-energy contact.";
-  else if (diagnostics.linearSpeed > 1.2) course.textContent = "Counter-thrust now. The wreck is physical and will accept collision impulses.";
-  else course.textContent = "Hold working distance, translate around the wreck, inspect its six modules, then retreat.";
+  if (cut.state === "complete") {
+    course.textContent = `Cut complete: ${cut.lastCompletedConnectionId}. The body remains physical; release C before attempting another cut.`;
+    status.textContent = `Joint severed. ${diagnostics.wreckConnectionCount} live structural joints remain.`;
+  } else if (diagnostics.distanceToWreck > CUTTER_RANGE_METERS) {
+    course.textContent = `Approach under control. Cutter range is ${CUTTER_RANGE_METERS.toFixed(0)} m.`;
+    status.textContent = "Cutter ready; target is outside working range.";
+  } else if (!cut.canCut) {
+    course.textContent = `Aim the craft toward the marked joint. Required aim alignment: ${CUTTER_AIM_COSINE.toFixed(2)}.`;
+    status.textContent = "Cutter ready; hold aim and range before cutting.";
+  } else if (cut.state === "cutting") {
+    course.textContent = `Cutting ${cut.targetId}: ${Math.round(cut.progress01 * 100)}%. Leaving range or aim interrupts progress.`;
+    status.textContent = "Cutter engaged on a live Rapier joint.";
+  } else {
+    course.textContent = `Target locked: ${cut.targetId} (${cut.targetClass}). Hold C to sever the physical joint.`;
+    status.textContent = "Cutter ready; valid joint target acquired.";
+  }
+  updateCutMarker(cut);
 }
 
 function frame(now) {
   if (disposed) return;
   const delta = (now - lastTime) / 1000;
   lastTime = now;
-  loop.advance(delta, () => sandbox.step(controller, input.getState()));
+  loop.advance(delta, () => {
+    cutter.step(sandbox, input.isCutActive());
+    sandbox.step(controller, input.getState());
+  });
   presenter.sync(sandbox);
   presenter.updateCamera(sandbox, camera);
   updateDiagnostics();
@@ -157,8 +215,7 @@ function frame(now) {
 
 presenter.updateCamera(sandbox, camera);
 updateDiagnostics();
-status.textContent = "Wreck physics ready. Six dynamic modules are connected by six live Rapier joints.";
-document.body.dataset.phase2 = "ready";
+document.body.dataset.phase3 = "ready";
 requestAnimationFrame(frame);
 
 window.addEventListener("beforeunload", () => {
@@ -174,5 +231,7 @@ window.addEventListener("beforeunload", () => {
   axesHelper.geometry.dispose();
   if (Array.isArray(axesHelper.material)) axesHelper.material.forEach((material) => material.dispose());
   else axesHelper.material.dispose();
+  cutMarker.geometry.dispose();
+  cutMarker.material.dispose();
   renderer.dispose();
 }, { once: true });

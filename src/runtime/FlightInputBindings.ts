@@ -12,7 +12,7 @@ export type FlightInputActions = {
 const CONTROL_CODES = new Set([
   "KeyW", "KeyS", "KeyA", "KeyD", "KeyR", "KeyF",
   "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
-  "KeyQ", "KeyE", "Space", "KeyX",
+  "KeyQ", "KeyE", "Space", "KeyC", "KeyX",
 ]);
 
 export class FlightInputBindings {
@@ -45,6 +45,10 @@ export class FlightInputBindings {
 
   clear(): void {
     this.pressed.clear();
+  }
+
+  isCutActive(): boolean {
+    return this.pressed.has("KeyC");
   }
 
   getState(): FlightInput {
