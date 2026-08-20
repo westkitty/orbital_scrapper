@@ -13,31 +13,46 @@ const ROLE_COLORS = {
 };
 
 const MATERIAL = {
-  hull: { color: 0x273449, roughness: 0.54, metalness: 0.62 },
-  hullLight: { color: 0x52657d, roughness: 0.48, metalness: 0.58 },
-  dark: { color: 0x0b1220, roughness: 0.38, metalness: 0.75 },
-  brass: { color: 0xa17b4a, roughness: 0.42, metalness: 0.7 },
-  solar: { color: 0x172554, roughness: 0.3, metalness: 0.52, emissive: 0x081b4a, emissiveIntensity: 0.45 },
-  canopy: { color: 0x67e8f9, roughness: 0.16, metalness: 0.32, emissive: 0x083344, emissiveIntensity: 0.5 },
-  hardpoint: { color: 0xfde68a, roughness: 0.28, metalness: 0.72, emissive: 0x713f12, emissiveIntensity: 0.8 },
-  hazard: { color: 0xfb923c, roughness: 0.5, metalness: 0.42, emissive: 0x7c2d12, emissiveIntensity: 0.32 },
+  hull: { color: 0x273449 },
+  hullLight: { color: 0x52657d },
+  dark: { color: 0x0b1220 },
+  brass: { color: 0xa17b4a },
+  solar: { color: 0x172554, emissive: 0x081b4a, emissiveIntensity: 0.38 },
+  canopy: { color: 0x67e8f9, emissive: 0x083344, emissiveIntensity: 0.45 },
+  hardpoint: { color: 0xfde68a, emissive: 0x713f12, emissiveIntensity: 0.72 },
+  hazard: { color: 0xfb923c, emissive: 0x7c2d12, emissiveIntensity: 0.28 },
 };
 
-function material(options) {
-  return new THREE.MeshStandardMaterial(options);
+function material(options = MATERIAL.hull) {
+  return new THREE.MeshLambertMaterial({
+    color: options.color ?? 0x64748b,
+    emissive: options.emissive ?? 0x000000,
+    emissiveIntensity: options.emissiveIntensity ?? 1,
+    wireframe: options.wireframe ?? false,
+    transparent: options.transparent ?? false,
+    opacity: options.opacity ?? 1,
+    side: options.side ?? THREE.FrontSide,
+  });
 }
 
 function box(size, options = MATERIAL.hull) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(size[0], size[1], size[2]), material(options));
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
+  mesh.castShadow = false;
+  mesh.receiveShadow = false;
   return mesh;
 }
 
-function cylinder(radius, length, options = MATERIAL.hull, radialSegments = 16) {
+function cylinder(radius, length, options = MATERIAL.hull, radialSegments = 10) {
   const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, radialSegments), material(options));
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
+  mesh.castShadow = false;
+  mesh.receiveShadow = false;
+  return mesh;
+}
+
+function torus(radius, tube, options = MATERIAL.brass) {
+  const mesh = new THREE.Mesh(new THREE.TorusGeometry(radius, tube, 6, 12), material(options));
+  mesh.castShadow = false;
+  mesh.receiveShadow = false;
   return mesh;
 }
 
@@ -45,13 +60,15 @@ function addHardpoints(group, component) {
   group.userData.attachmentMarkers = {};
   for (const attachment of component.attachments ?? []) {
     const marker = new THREE.Mesh(
-      new THREE.SphereGeometry(0.11, 10, 8),
+      new THREE.SphereGeometry(0.11, 6, 4),
       material(MATERIAL.hardpoint),
     );
     marker.name = `attachment-${component.id}-${attachment.id}`;
     marker.position.set(attachment.localPosition.x, attachment.localPosition.y, attachment.localPosition.z);
     marker.userData.attachmentId = attachment.id;
     marker.userData.componentId = component.id;
+    marker.castShadow = false;
+    marker.receiveShadow = false;
     group.userData.attachmentMarkers[attachment.id] = marker;
     group.add(marker);
   }
@@ -74,6 +91,13 @@ export class FlightScenePresenter {
     this.thrusterMaterials = [];
     this.detailMeshCount = 0;
 
+    // The release presentation keeps directional/fill lighting but avoids a second
+    // dynamic shadow render pass. Structural readability comes from silhouette,
+    // material contrast, hardpoints, and the live tool overlays instead.
+    this.scene.traverse((object) => {
+      if (object.isLight && "castShadow" in object) object.castShadow = false;
+    });
+
     const components = new Map((sandbox.getWreckComponents?.() ?? []).map((component) => [component.id, component]));
     for (const record of sandbox.getBodyRecords()) {
       const component = components.get(record.id);
@@ -93,16 +117,10 @@ export class FlightScenePresenter {
 
   createBody(record) {
     const [x, y, z] = record.visual.size;
-    const geometry = new THREE.BoxGeometry(x, y, z);
-    const bodyMaterial = material({
+    const mesh = box([x, y, z], {
       color: ROLE_COLORS[record.visual.role] ?? 0x64748b,
-      roughness: 0.78,
-      metalness: record.visual.role === "wreck-heavy" ? 0.4 : record.visual.role === "target" ? 0.25 : 0.18,
       wireframe: record.visual.role === "target",
     });
-    const mesh = new THREE.Mesh(geometry, bodyMaterial);
-    mesh.castShadow = record.visual.role !== "target";
-    mesh.receiveShadow = true;
     this.detailMeshCount += 1;
     return mesh;
   }
@@ -116,94 +134,64 @@ export class FlightScenePresenter {
 
     if (component.componentType === "spine") {
       group.add(box([x, y * 0.82, z], MATERIAL.hull));
-      const dorsal = box([x * 0.58, y * 0.24, z * 0.72], MATERIAL.hullLight);
+      const dorsal = box([x * 0.6, y * 0.22, z * 0.72], MATERIAL.hullLight);
       dorsal.position.y = y * 0.5;
       group.add(dorsal);
-      for (const side of [-1, 1]) {
-        const rail = box([0.12, y * 0.88, z * 0.9], MATERIAL.brass);
-        rail.position.x = side * x * 0.44;
-        group.add(rail);
-      }
+      const centerRail = box([0.12, y * 0.96, z * 0.84], MATERIAL.brass);
+      centerRail.position.x = x * 0.42;
+      group.add(centerRail);
     } else if (component.componentType === "engine") {
-      const casing = box([x * 0.78, y * 0.9, z * 0.72], MATERIAL.hull);
+      const casing = box([x * 0.82, y * 0.9, z * 0.7], MATERIAL.hull);
       casing.position.z = -z * 0.08;
       group.add(casing);
-      const core = cylinder(Math.min(x, y) * 0.28, z * 0.72, MATERIAL.brass, 18);
+      const core = cylinder(Math.min(x, y) * 0.28, z * 0.66, MATERIAL.brass, 10);
       core.rotation.x = Math.PI / 2;
       core.position.z = z * 0.08;
       group.add(core);
       const nozzle = new THREE.Mesh(
-        new THREE.ConeGeometry(Math.min(x, y) * 0.34, z * 0.34, 18, 1, true),
+        new THREE.ConeGeometry(Math.min(x, y) * 0.32, z * 0.3, 10, 1, true),
         material(MATERIAL.dark),
       );
       nozzle.rotation.x = -Math.PI / 2;
-      nozzle.position.z = z * 0.5;
+      nozzle.position.z = z * 0.48;
       group.add(nozzle);
     } else if (component.componentType === "panel" || component.componentType === "sensor") {
       group.add(box([x, Math.max(0.09, y * 0.58), z], MATERIAL.dark));
-      const frameThickness = Math.max(0.06, Math.min(x, z) * 0.035);
-      for (const side of [-1, 1]) {
-        const railX = box([frameThickness, y + 0.06, z], MATERIAL.hullLight);
-        railX.position.x = side * (x * 0.5 - frameThickness * 0.5);
-        group.add(railX);
-        const railZ = box([x, y + 0.06, frameThickness], MATERIAL.hullLight);
-        railZ.position.z = side * (z * 0.5 - frameThickness * 0.5);
-        group.add(railZ);
-      }
-      const columns = component.componentType === "sensor" ? 5 : 4;
-      for (let index = 0; index < columns; index += 1) {
-        const cell = box([x / columns - 0.08, y + 0.075, z * 0.82], MATERIAL.solar);
-        cell.position.x = -x * 0.5 + (index + 0.5) * (x / columns);
-        cell.position.y = y * 0.18;
-        group.add(cell);
-      }
+      const inset = box([x * 0.86, y + 0.07, z * 0.8], MATERIAL.solar);
+      inset.position.y = y * 0.18;
+      group.add(inset);
     } else if (component.componentType === "rail") {
       group.add(box([x, y, z], MATERIAL.hullLight));
-      for (const end of [-1, 1]) {
-        const collar = box([x * 1.35, y * 1.35, Math.min(0.18, z * 0.12)], MATERIAL.brass);
-        collar.position.z = end * z * 0.42;
-        group.add(collar);
-      }
+      const collar = box([x * 1.3, y * 1.3, Math.min(0.2, z * 0.14)], MATERIAL.brass);
+      collar.position.z = z * 0.38;
+      group.add(collar);
     } else if (component.componentType === "junction") {
       group.add(box([x, y, z], MATERIAL.hull));
-      const cross = box([x * 1.08, Math.min(0.16, y * 0.32), z * 0.38], MATERIAL.brass);
+      const cross = box([x * 1.06, Math.min(0.16, y * 0.32), z * 0.4], MATERIAL.brass);
       cross.position.y = y * 0.44;
       group.add(cross);
     } else if (component.componentType === "battery") {
       group.add(box([x, y, z], MATERIAL.dark));
-      for (const offset of [-0.28, 0.28]) {
-        const band = box([x * 1.03, y * 1.04, Math.max(0.1, z * 0.1)], MATERIAL.hazard);
-        band.position.z = offset * z;
-        group.add(band);
-      }
-      const cap = box([x * 0.7, y * 0.14, z * 0.55], MATERIAL.brass);
-      cap.position.y = y * 0.55;
-      group.add(cap);
+      const band = box([x * 1.03, y * 1.04, Math.max(0.12, z * 0.12)], MATERIAL.hazard);
+      group.add(band);
     } else if (component.componentType === "tank") {
-      const tank = cylinder(Math.min(y, z) * 0.43, x * 0.9, MATERIAL.hullLight, 20);
+      const tank = cylinder(Math.min(y, z) * 0.43, x * 0.9, MATERIAL.hullLight, 12);
       tank.rotation.z = Math.PI / 2;
       group.add(tank);
-      for (const side of [-1, 1]) {
-        const band = new THREE.Mesh(
-          new THREE.TorusGeometry(Math.min(y, z) * 0.45, 0.06, 8, 20),
-          material(MATERIAL.brass),
-        );
-        band.rotation.y = Math.PI / 2;
-        band.position.x = side * x * 0.28;
-        group.add(band);
-      }
+      const band = torus(Math.min(y, z) * 0.45, 0.06, MATERIAL.brass);
+      band.rotation.y = Math.PI / 2;
+      group.add(band);
     } else if (component.componentType === "reactor") {
-      const coreMaterial = material({ color: 0x334155, roughness: 0.3, metalness: 0.72, emissive: 0x164e63, emissiveIntensity: 0.6 });
-      const core = new THREE.Mesh(new THREE.CylinderGeometry(Math.min(x, y) * 0.34, Math.min(x, y) * 0.34, z * 0.82, 20), coreMaterial);
+      const core = cylinder(Math.min(x, y) * 0.34, z * 0.82, { color: 0x334155, emissive: 0x164e63, emissiveIntensity: 0.52 }, 12);
       core.rotation.x = Math.PI / 2;
       group.add(core);
-      for (const offset of [-0.24, 0.24]) {
-        const ring = new THREE.Mesh(new THREE.TorusGeometry(Math.min(x, y) * 0.44, 0.07, 8, 24), material(MATERIAL.hazard));
-        ring.position.z = offset * z;
-        group.add(ring);
-      }
+      const ring = torus(Math.min(x, y) * 0.44, 0.07, MATERIAL.hazard);
+      group.add(ring);
     } else {
       group.add(box([x, y, z], MATERIAL.hull));
+      const accent = box([x * 0.72, Math.max(0.08, y * 0.12), z * 0.72], MATERIAL.hullLight);
+      accent.position.y = y * 0.45;
+      group.add(accent);
     }
 
     addHardpoints(group, component);
@@ -238,8 +226,8 @@ export class FlightScenePresenter {
       pod.position.z = z * 0.06;
       group.add(pod);
 
-      const thrusterMaterial = material({ color: 0x1e293b, roughness: 0.3, metalness: 0.8, emissive: 0x0ea5e9, emissiveIntensity: 0.5 });
-      const thruster = new THREE.Mesh(new THREE.ConeGeometry(x * 0.11, z * 0.28, 12, 1, true), thrusterMaterial);
+      const thrusterMaterial = material({ color: 0x1e293b, emissive: 0x0ea5e9, emissiveIntensity: 0.45 });
+      const thruster = new THREE.Mesh(new THREE.ConeGeometry(x * 0.11, z * 0.28, 8, 1, true), thrusterMaterial);
       thruster.rotation.x = Math.PI / 2;
       thruster.position.set(side * x * 0.54, 0, z * 0.55);
       group.add(thruster);
@@ -272,7 +260,7 @@ export class FlightScenePresenter {
       Math.abs(input?.forward ?? 0) + Math.abs(input?.strafe ?? 0) * 0.45 + Math.abs(input?.vertical ?? 0) * 0.35,
     ));
     for (const thrusterMaterial of this.thrusterMaterials) {
-      thrusterMaterial.emissiveIntensity = 0.45 + thrustLevel * 2.4;
+      thrusterMaterial.emissiveIntensity = 0.42 + thrustLevel * 1.7;
     }
     return thrustLevel;
   }
