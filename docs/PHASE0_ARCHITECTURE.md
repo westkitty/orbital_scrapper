@@ -9,7 +9,7 @@ Use a browser-native, framework-light stack:
 
 - **Rendering:** Three.js `0.185.0`, `WebGLRenderer`.
 - **Physics:** `@dimforge/rapier3d-compat` `0.19.3`.
-- **Language:** TypeScript `6.0.0`.
+- **Language:** TypeScript `7.0.2`.
 - **Build/runtime tooling:** Vite `8.2.1`, Node `>=22.12.0` for development and CI.
 - **Application architecture:** vanilla TypeScript rather than React/R3F for the simulation core.
 
@@ -17,7 +17,7 @@ Use a browser-native, framework-light stack:
 
 Orbital Scrapper's expensive risk is not page UI. It is a large number of rigid bodies and constraints whose state changes at runtime. The simulation therefore stays outside a component reconciliation system and advances through one explicit fixed-step owner. Three.js owns presentation; Rapier owns rigid-body/constraint truth.
 
-Rapier's JavaScript changelog identifies `0.19.3` as the current release in the inspected upstream source, and the `0.19.x` line includes performance work for scenes with many contact constraints. That is directly relevant to modular wrecks. Three.js `0.185.0` and Vite `8.2.1` are pinned from their current upstream package manifests inspected for this phase.
+Rapier's JavaScript changelog identifies `0.19.3` as the current release in the inspected upstream source, and the `0.19.x` line includes performance work for scenes with many contact constraints. That is directly relevant to modular wrecks. Three.js `0.185.0` and Vite `8.2.1` are pinned from their current upstream package manifests inspected for this phase. TypeScript `7.0.2` is pinned from the published npm registry release rather than from an unreleased repository version.
 
 ## Ownership contract
 
