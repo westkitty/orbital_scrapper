@@ -22,7 +22,7 @@ export class FlightScenePresenter {
   rebuild(sandbox) {
     this.disposeRoot();
     this.root = new THREE.Group();
-    this.root.name = "gameplay-physics-root";
+    this.root.name = "phase-one-flight-root";
     this.scene.add(this.root);
 
     for (const record of sandbox.getBodyRecords()) {
