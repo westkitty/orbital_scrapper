@@ -8,17 +8,18 @@ import { FIXED_TIMESTEP_SECONDS } from "./physics/PhysicsSandbox.js";
 import { FlightScenePresenter } from "./presentation/FlightScenePresenter.js";
 import { FixedStepLoop } from "./runtime/FixedStepLoop.js";
 import { FlightInputBindings } from "./runtime/FlightInputBindings.js";
+import { StructuralGraph } from "./structure/StructuralGraph.js";
 import { TETHER_MAX_TENSION_NEWTONS, TETHER_RANGE_METERS, TetherSystem } from "./tether/TetherSystem.js";
 
 const app = document.querySelector("#app");
 if (!app) throw new Error("Missing #app root");
 
 app.innerHTML = `
-  <section class="viewport" aria-label="Phase 4 tether manipulation and bracing viewport"></section>
-  <aside class="panel" aria-label="Phase 4 tether controls and diagnostics">
-    <p class="eyebrow">ORBITAL SCRAPPER // PHASE 4</p>
-    <h1>Tether Manipulation & Bracing</h1>
-    <p class="copy">Cut a component loose, then hold the tether to pull or arrest it. The same bounded physical tether can brace an attached section before a cut.</p>
+  <section class="viewport" aria-label="Phase 5 structural graph synchronization viewport"></section>
+  <aside class="panel" aria-label="Phase 5 structural graph diagnostics and salvage controls">
+    <p class="eyebrow">ORBITAL SCRAPPER // PHASE 5</p>
+    <h1>Structural Graph Synchronization</h1>
+    <p class="copy">The physical wreck remains authoritative. A synchronized graph now mirrors live modules and joints, while active tether braces appear only as temporary support state.</p>
 
     <div class="control-grid" aria-label="Flight, cutter, and tether controls">
       <div><strong>Thrust</strong><span><kbd>W</kbd>/<kbd>S</kbd></span></div>
@@ -41,6 +42,14 @@ app.innerHTML = `
       <div><dt>Live joints</dt><dd id="diag-connections">—</dd></div>
       <div><dt>Cuttable joints</dt><dd id="diag-cuttable">—</dd></div>
       <div><dt>Severed joints</dt><dd id="diag-severed">—</dd></div>
+      <div><dt>Graph nodes</dt><dd id="diag-graph-nodes">—</dd></div>
+      <div><dt>Graph edges</dt><dd id="diag-graph-edges">—</dd></div>
+      <div><dt>Temporary supports</dt><dd id="diag-graph-supports">—</dd></div>
+      <div><dt>Bridge joints</dt><dd id="diag-graph-bridges">—</dd></div>
+      <div><dt>Articulation modules</dt><dd id="diag-graph-articulations">—</dd></div>
+      <div><dt>Spine section</dt><dd id="diag-graph-section">—</dd></div>
+      <div><dt>Topology revision</dt><dd id="diag-graph-topology-rev">—</dd></div>
+      <div><dt>Support revision</dt><dd id="diag-graph-support-rev">—</dd></div>
       <div><dt>Cut target</dt><dd id="diag-cut-target">—</dd></div>
       <div><dt>Cutter state</dt><dd id="diag-cut-state">—</dd></div>
       <div><dt>Cut progress</dt><dd id="diag-cut-progress">—</dd></div>
@@ -58,8 +67,8 @@ app.innerHTML = `
       <div><dt>Input</dt><dd id="diag-input">neutral</dd></div>
     </dl>
 
-    <p class="course" id="course">Cut the green panel loose with <kbd>C</kbd>, release the cutter, then hold <kbd>T</kbd> to reel the detached salvage toward the ship.</p>
-    <p class="status" id="status" role="status">Initializing tether scene…</p>
+    <p class="course" id="course">The graph starts with six nodes and six physical edges. Cut the panel and watch one graph edge disappear while the panel node remains.</p>
+    <p class="status" id="status" role="status">Initializing structural graph…</p>
   </aside>
 `;
 
@@ -114,6 +123,8 @@ const sandbox = await WreckSandbox.create();
 const controller = new FlightController();
 const cutter = new CuttingSystem();
 const tether = new TetherSystem();
+const graph = new StructuralGraph();
+graph.sync(sandbox, tether.getDiagnostics(sandbox));
 const presenter = new FlightScenePresenter(scene);
 presenter.rebuild(sandbox);
 const loop = new FixedStepLoop(FIXED_TIMESTEP_SECONDS, 5);
@@ -125,6 +136,7 @@ function resetScene() {
   sandbox.reset();
   cutter.reset();
   tether.reset();
+  graph.sync(sandbox, tether.getDiagnostics(sandbox));
   loop.reset();
   input.clear();
   presenter.rebuild(sandbox);
@@ -192,6 +204,8 @@ function updateDiagnostics() {
   const diagnostics = sandbox.getDiagnostics();
   const cut = cutter.getDiagnostics(sandbox);
   const tetherDiagnostics = tether.getDiagnostics(sandbox);
+  graph.sync(sandbox, tetherDiagnostics);
+  const graphDiagnostics = graph.getDiagnostics();
   const flightState = input?.getState?.() ?? { forward: 0, strafe: 0, vertical: 0, pitch: 0, yaw: 0, roll: 0, brake: false };
   const cutActive = input?.isCutActive?.() ?? false;
   const tetherActive = input?.isTetherActive?.() ?? false;
@@ -203,6 +217,14 @@ function updateDiagnostics() {
   document.querySelector("#diag-connections").textContent = String(diagnostics.wreckConnectionCount);
   document.querySelector("#diag-cuttable").textContent = String(diagnostics.wreckCuttableConnectionCount);
   document.querySelector("#diag-severed").textContent = String(diagnostics.wreckSeveredConnectionCount);
+  document.querySelector("#diag-graph-nodes").textContent = String(graphDiagnostics.nodeCount);
+  document.querySelector("#diag-graph-edges").textContent = String(graphDiagnostics.edgeCount);
+  document.querySelector("#diag-graph-supports").textContent = String(graphDiagnostics.supportCount);
+  document.querySelector("#diag-graph-bridges").textContent = graphDiagnostics.bridgeConnectionIds.join(", ") || "none";
+  document.querySelector("#diag-graph-articulations").textContent = graphDiagnostics.articulationComponentIds.join(", ") || "none";
+  document.querySelector("#diag-graph-section").textContent = String(graphDiagnostics.spineSectionSize);
+  document.querySelector("#diag-graph-topology-rev").textContent = String(graphDiagnostics.topologyRevision);
+  document.querySelector("#diag-graph-support-rev").textContent = String(graphDiagnostics.supportRevision);
   document.querySelector("#diag-cut-target").textContent = cut.targetId ?? "none";
   document.querySelector("#diag-cut-state").textContent = cut.state;
   document.querySelector("#diag-cut-progress").textContent = `${Math.round(cut.progress01 * 100)}%`;
@@ -219,27 +241,30 @@ function updateDiagnostics() {
   document.querySelector("#diag-step").textContent = `${(diagnostics.fixedTimestepSeconds * 1000).toFixed(2)} ms`;
   document.querySelector("#diag-input").textContent = describeInput(flightState, cutActive, tetherActive);
 
-  if (tetherDiagnostics.state === "snapped") {
-    course.textContent = `Tether overload exceeded ${TETHER_MAX_TENSION_NEWTONS.toFixed(0)} N. Release T before re-engaging.`;
-    status.textContent = "Tether snapped under finite load; no force is being applied.";
+  if (graphDiagnostics.nodeCount !== diagnostics.wreckComponentCount || graphDiagnostics.edgeCount !== diagnostics.wreckConnectionCount) {
+    course.textContent = "Graph/physics mismatch detected. Phase 5 must not proceed with divergent topology.";
+    status.textContent = "Structural graph synchronization failure.";
+  } else if (tetherDiagnostics.state === "snapped") {
+    course.textContent = `Tether overload exceeded ${TETHER_MAX_TENSION_NEWTONS.toFixed(0)} N. Temporary graph support is removed until re-engagement.`;
+    status.textContent = "Tether snapped; permanent graph topology remains unchanged.";
   } else if (tetherDiagnostics.state === "attached") {
-    course.textContent = `Tethered to ${tetherDiagnostics.targetId}: ${tetherDiagnostics.tensionNewtons.toFixed(1)} N. Release T for clean teardown.`;
-    status.textContent = "Bounded equal-and-opposite tether impulses are active through Rapier.";
+    course.textContent = `Temporary support active on ${tetherDiagnostics.targetId}. Permanent edges remain tied only to live wreck joints.`;
+    status.textContent = "Graph mirrors physical topology plus one temporary tether support.";
   } else if (cut.state === "complete") {
-    course.textContent = `Cut complete: ${cut.lastCompletedConnectionId}. Release C, then hold T to capture the detached component.`;
-    status.textContent = `Joint severed. ${diagnostics.wreckConnectionCount} live structural joints remain.`;
+    course.textContent = `Cut complete: ${cut.lastCompletedConnectionId}. Graph now has ${graphDiagnostics.edgeCount} live edges while all ${graphDiagnostics.nodeCount} component nodes remain.`;
+    status.textContent = "Physical joint removal and graph edge removal are synchronized.";
   } else if (diagnostics.distanceToWreck > CUTTER_RANGE_METERS) {
     course.textContent = `Approach under control. Cutter range is ${CUTTER_RANGE_METERS.toFixed(0)} m; tether range is ${TETHER_RANGE_METERS.toFixed(0)} m.`;
-    status.textContent = "Salvage tools ready; target is outside working range.";
+    status.textContent = "Graph is synchronized; salvage tools are outside working range.";
   } else if (!cut.canCut) {
-    course.textContent = `Aim toward the marked cut joint. Required cutter alignment: ${CUTTER_AIM_COSINE.toFixed(2)}.`;
-    status.textContent = "Cutter ready; tether can engage a component with T when in range.";
+    course.textContent = `Aim toward the marked cut joint. Current bridge set: ${graphDiagnostics.bridgeConnectionIds.join(", ") || "none"}.`;
+    status.textContent = "Topology queries are live; scanner risk prediction is intentionally not implemented yet.";
   } else if (cut.state === "cutting") {
-    course.textContent = `Cutting ${cut.targetId}: ${Math.round(cut.progress01 * 100)}%. Leaving range or aim interrupts progress.`;
-    status.textContent = "Cutter engaged on a live Rapier joint.";
+    course.textContent = `Cutting ${cut.targetId}: ${Math.round(cut.progress01 * 100)}%. Graph changes only when the physical joint actually disappears.`;
+    status.textContent = "Structural graph is following the live wreck, not predicting it.";
   } else {
-    course.textContent = `Cut target locked: ${cut.targetId}. Hold C to sever it, or hold T to brace a component before cutting.`;
-    status.textContent = "Cutter and tether are ready.";
+    course.textContent = `Graph synchronized: ${graphDiagnostics.nodeCount} nodes, ${graphDiagnostics.edgeCount} edges, ${graphDiagnostics.bridgeConnectionIds.length} bridges.`;
+    status.textContent = "Physical wreck remains authoritative; graph is ready for structural reasoning tests.";
   }
   updateCutMarker(cut);
   updateTetherLine(tetherDiagnostics);
@@ -253,6 +278,7 @@ function frame(now) {
     cutter.step(sandbox, input.isCutActive());
     tether.step(sandbox, input.isTetherActive());
     sandbox.step(controller, input.getState());
+    graph.sync(sandbox, tether.getDiagnostics(sandbox));
   });
   presenter.sync(sandbox);
   presenter.updateCamera(sandbox, camera);
@@ -263,7 +289,7 @@ function frame(now) {
 
 presenter.updateCamera(sandbox, camera);
 updateDiagnostics();
-document.body.dataset.phase4 = "ready";
+document.body.dataset.phase5 = "ready";
 requestAnimationFrame(frame);
 
 window.addEventListener("beforeunload", () => {
