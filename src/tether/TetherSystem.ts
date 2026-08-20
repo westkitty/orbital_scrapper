@@ -145,7 +145,7 @@ export class TetherSystem {
       this.aimAlignment = candidate.aimAlignment;
     }
 
-    const target = sandbox.getWreckComponent(this.targetId);
+    const target = sandbox.getWreckComponent(this.targetId!);
     const craft = sandbox.getCraftBody();
     const craftPosition = craft.translation();
     const targetPosition = target.body.translation();
