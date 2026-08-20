@@ -7,7 +7,7 @@ const SAVE_KEY = "orbital-scrapper-progression-v1";
 const PROFILE = "/tmp/orbital-scrapper-phase11-chrome";
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-rmSync(PROFILE, { recursive: true, force: true });
+rmSync(PROFILE, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 
 const preview = spawn(process.execPath, ["./node_modules/vite/bin/vite.js", "preview", "--host", "127.0.0.1", "--port", "4173"], { stdio: ["ignore", "pipe", "pipe"] });
 let previewOutput = "";
@@ -21,6 +21,10 @@ async function stopProcess(child) {
   child.kill("SIGTERM");
   await Promise.race([new Promise((resolve) => child.once("exit", resolve)), sleep(1500)]);
   if (child.exitCode === null) child.kill("SIGKILL");
+}
+
+function removeProfileBestEffort() {
+  try { rmSync(PROFILE, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch {}
 }
 
 function findBrowser() {
@@ -179,5 +183,7 @@ try {
 
   console.log(`phase11 smoke: production HUD/asset/VFX/audio path passed in ${browserPath}; meshes=${clean.presentationMeshes}; scan=${clean.scanTarget}; audio=${audioOn.audioState}; cut=${cut.lastCut}; tether=${tethered.tetherTarget}; reset=${reset.graph}`);
 } finally {
-  await stopProcess(browser); await stopProcess(preview); rmSync(PROFILE, { recursive: true, force: true });
+  await stopProcess(browser);
+  await stopProcess(preview);
+  removeProfileBestEffort();
 }
