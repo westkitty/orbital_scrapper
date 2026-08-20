@@ -9,6 +9,13 @@ type RapierRigidBodyDesc = InstanceType<typeof RAPIER.RigidBodyDesc>;
 type RapierImpulseJoint = ReturnType<RapierWorld["createImpulseJoint"]>;
 type RapierEventQueue = InstanceType<typeof RAPIER.EventQueue>;
 type Vec3 = { x: number; y: number; z: number };
+type RapierContactForceEvent = {
+  collider1(): number;
+  collider2(): number;
+  totalForceMagnitude(): number;
+  maxForceMagnitude(): number;
+  maxForceDirection(): Vec3;
+};
 
 export type WreckBodyRole = "craft" | "wreck-spine" | "wreck-heavy" | "wreck-light" | "wreck-branch";
 export type WreckComponentType = "spine" | "engine" | "panel" | "rail" | "junction";
@@ -574,7 +581,7 @@ export class WreckSandbox {
 
   private captureContactForceEvents(): void {
     const events: WreckContactForceEvent[] = [];
-    this.eventQueue.drainContactForceEvents((event) => {
+    this.eventQueue.drainContactForceEvents((event: RapierContactForceEvent) => {
       const bodyAId = this.colliderBodyIds.get(event.collider1());
       const bodyBId = this.colliderBodyIds.get(event.collider2());
       if (!bodyAId || !bodyBId) return;
