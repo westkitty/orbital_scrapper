@@ -253,16 +253,14 @@ try {
 
   await callCdp(wsUrl, "Page.enable");
   await callCdp(wsUrl, "Performance.enable");
-  await callCdp(wsUrl, "Page.addScriptToEvaluateOnNewDocument", { source: INSTRUMENTATION });
+  const bootstrapSource = `try { localStorage.removeItem(${JSON.stringify(SAVE_KEY)}); localStorage.removeItem(${JSON.stringify(BACKUP_KEY)}); } catch {}\n${INSTRUMENTATION}`;
+  const bootstrap = await callCdp(wsUrl, "Page.addScriptToEvaluateOnNewDocument", { source: bootstrapSource });
   await callCdp(wsUrl, "Emulation.setEmulatedMedia", { media: "screen", features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
   await callCdp(wsUrl, "Page.navigate", { url: APP_URL });
-  await waitForState(wsUrl, (s) => s.ready, 300, "Initial Phase 12 boot");
-
-  await evaluate(wsUrl, `localStorage.removeItem(${JSON.stringify(SAVE_KEY)}); localStorage.removeItem(${JSON.stringify(BACKUP_KEY)}); location.reload(); true`);
-  const clean = await waitForState(wsUrl, (s) => s.ready && s.reducedMotion && s.runState === "field" && s.runId === 1 && s.completedRuns === 0 && s.failedRuns === 0 && s.bodies === 7 && s.graph.includes("6 nodes / 6 edges / 0 supports") && s.presentationMeshes > 0, 300, "Clean reduced-motion Phase 12 start");
+  const clean = await waitForState(wsUrl, (s) => s.ready && s.reducedMotion && s.runState === "field" && s.runId === 1 && s.completedRuns === 0 && s.failedRuns === 0 && s.bodies === 7 && s.graph.includes("6 nodes / 6 edges / 0 supports") && s.presentationMeshes > 0 && s.activeListeners > 0, 300, "Clean reduced-motion Phase 12 start");
+  if (bootstrap?.identifier) await callCdp(wsUrl, "Page.removeScriptToEvaluateOnNewDocument", { identifier: bootstrap.identifier });
   const baselineListeners = clean.activeListeners;
   const baselineMeshes = clean.presentationMeshes;
-  if (!(baselineListeners > 0)) throw new Error(`Listener instrumentation did not observe the application lifecycle. state=${JSON.stringify(clean)}`);
 
   await clickElement(wsUrl, "#audio-toggle");
   const audioReady = await waitForState(wsUrl, (s) => s.audioState === "ready", 80, "Audio enable for endurance run");
@@ -291,7 +289,7 @@ try {
     const fresh = await waitForState(wsUrl, (s) => s.runState === "field" && s.completedRuns === runIndex && s.failedRuns === 0 && s.bodies === 7 && s.graph.includes("6 nodes / 6 edges / 0 supports") && s.settlement === "field", 120, `Fresh run after endurance settlement ${runIndex}`);
     if (fresh.activeListeners !== baselineListeners) throw new Error(`Listener count grew after run ${runIndex}: ${fresh.activeListeners} vs ${baselineListeners}`);
     if (fresh.presentationMeshes !== baselineMeshes) throw new Error(`Presentation mesh count drifted after run ${runIndex}: ${fresh.presentationMeshes} vs ${baselineMeshes}`);
-    if (runIndex >= 1 && Math.abs(fresh.clampLimit - UPGRADED_CAPTURE_LIMIT) > 0.001) throw new Error(`Purchased clamp capability was not preserved on fresh run ${runIndex + 1}: ${JSON.stringify(fresh)}`);
+    if (Math.abs(fresh.clampLimit - UPGRADED_CAPTURE_LIMIT) > 0.001) throw new Error(`Purchased clamp capability was not preserved on fresh run ${runIndex + 1}: ${JSON.stringify(fresh)}`);
   }
 
   const beforeRecovery = await currentState(wsUrl);
