@@ -11,12 +11,16 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/test/*.test.js",
     "test:phase0": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/test/fixedStepLoop.test.js .test-dist/test/inputBindings.test.js .test-dist/test/physicsSandbox.test.js .test-dist/test/scenePresenter.test.js",
+    "test:phase1": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/test/fixedStepLoop.test.js .test-dist/test/flightInputBindings.test.js .test-dist/test/flightSandbox.test.js .test-dist/test/flightScenePresenter.test.js .test-dist/test/inputBindings.test.js .test-dist/test/physicsSandbox.test.js .test-dist/test/scenePresenter.test.js",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4173",
     "smoke:phase1": "node scripts/phase1-smoke.mjs",
+    "smoke:phase2": "node scripts/phase2-smoke.mjs",
     "verify:phase0": "npm run verify:phase0-regression",
     "verify:phase0-regression": "npm run test:phase0 && npm run build",
-    "verify:phase1": "npm run test && npm run build && npm run smoke:phase1"
+    "verify:phase1": "npm run verify:phase1-regression",
+    "verify:phase1-regression": "npm run test:phase1 && npm run build",
+    "verify:phase2": "npm run test && npm run build && npm run smoke:phase2"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.19.3",
