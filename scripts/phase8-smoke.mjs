@@ -132,6 +132,12 @@ async function key(wsUrl, type, keyValue, code, virtualKeyCode) {
   });
 }
 
+async function holdFor(wsUrl, keySpec, milliseconds) {
+  await key(wsUrl, "keyDown", ...keySpec);
+  await sleep(milliseconds);
+  await key(wsUrl, "keyUp", ...keySpec);
+}
+
 async function holdUntil(wsUrl, keySpec, predicate, attempts, label) {
   await key(wsUrl, "keyDown", ...keySpec);
   let state = null;
@@ -145,6 +151,21 @@ async function holdUntil(wsUrl, keySpec, predicate, attempts, label) {
     await key(wsUrl, "keyUp", ...keySpec);
   }
   throw new Error(`${label} did not reach expected state. state=${JSON.stringify(state)}`);
+}
+
+async function approachWreck(wsUrl) {
+  let state = await currentState(wsUrl);
+  for (let pass = 0; pass < 14 && state.distance > 8.2; pass += 1) {
+    const thrustMs = state.distance > 11.5 ? 450 : 240;
+    await holdFor(wsUrl, ["w", "KeyW", 87], thrustMs);
+    await holdFor(wsUrl, [" ", "Space", 32], 750);
+    state = await currentState(wsUrl);
+    if (state.hull < 99.9 || state.collapse === "destroyed") {
+      throw new Error(`Bounded approach contacted the wreck. state=${JSON.stringify(state)}`);
+    }
+    if (state.distance < 4) throw new Error(`Bounded approach overshot safe cutter distance. state=${JSON.stringify(state)}`);
+  }
+  return state;
 }
 
 try {
@@ -177,18 +198,11 @@ try {
   const { page } = await waitForPage();
   const wsUrl = page.webSocketDebuggerUrl;
 
-  const approach = await holdUntil(
-    wsUrl,
-    ["w", "KeyW", 87],
-    (state) => state.cutTarget === "spine-panel" && state.cutState === "tracking",
-    90,
-    "Physical W approach",
-  );
-  if (!(approach.distance < 12)) throw new Error(`Approach did not materially close wreck distance: ${JSON.stringify(approach)}`);
-
-  await key(wsUrl, "keyDown", " ", "Space", 32);
-  await sleep(450);
-  await key(wsUrl, "keyUp", " ", "Space", 32);
+  const approach = await approachWreck(wsUrl);
+  if (!(approach.distance <= 8.2 && approach.distance >= 4 && approach.cutTarget === "spine-panel"
+    && approach.scanTarget === "spine-panel" && approach.hull >= 99.9)) {
+    throw new Error(`Could not establish a safe live scanner/cutter setup. state=${JSON.stringify(approach)}`);
+  }
 
   const cut = await holdUntil(
     wsUrl,
