@@ -102,9 +102,10 @@ async function currentState(wsUrl) {
 async function waitForPage() {
   let lastState = null;
   let lastError = null;
-  for (let attempt = 0; attempt < 120; attempt += 1) {
-    const targets = await fetchTargets();
-    const page = targets.find((target) => target.type === "page" && target.webSocketDebuggerUrl && target.url?.startsWith(APP_URL));
+  let lastTargets = [];
+  for (let attempt = 0; attempt < 300; attempt += 1) {
+    lastTargets = await fetchTargets();
+    const page = lastTargets.find((target) => target.type === "page" && target.webSocketDebuggerUrl && target.url?.startsWith(APP_URL));
     if (page) {
       try {
         lastState = await currentState(page.webSocketDebuggerUrl);
@@ -117,9 +118,10 @@ async function waitForPage() {
         lastError = error;
       }
     }
+    if (browser?.exitCode !== null) break;
     await sleep(100);
   }
-  throw new Error(`Phase 8 app did not initialize on the panel recovery fixture. state=${JSON.stringify(lastState)} error=${lastError?.message ?? "none"}\n${browserOutput}`);
+  throw new Error(`Phase 8 app did not initialize on the panel recovery fixture. browserExit=${browser?.exitCode ?? "running"} targets=${JSON.stringify(lastTargets.map((target) => ({ type: target.type, url: target.url })))} state=${JSON.stringify(lastState)} error=${lastError?.message ?? "none"}\n${browserOutput}`);
 }
 
 async function key(wsUrl, type, keyValue, code, virtualKeyCode) {
@@ -188,6 +190,7 @@ try {
     "--disable-renderer-backgrounding",
     "--enable-unsafe-swiftshader",
     "--use-gl=swiftshader",
+    "--user-data-dir=/tmp/orbital-scrapper-phase8-chrome",
     "--remote-debugging-address=127.0.0.1",
     "--remote-debugging-port=9222",
     APP_URL,
