@@ -26,6 +26,8 @@ export type PresentationAudioDiagnostics = {
   severityGain: number;
   mix: PresentationAudioMix;
   channels: readonly string[];
+  nodeCount: number;
+  contextCount: number;
 };
 
 export const VACUUM_AUDIO_CHANNELS = Object.freeze([
@@ -84,6 +86,7 @@ export class ProductionAudio {
   private nodes = new Map<string, { oscillator: any; gain: any }>();
   private enabled = false;
   private unavailable = false;
+  private contextCount = 0;
   private lastMix: PresentationAudioMix = derivePresentationAudioMix({
     severityScore: 0,
     severityState: "stable",
@@ -101,6 +104,21 @@ export class ProductionAudio {
   async enable(): Promise<boolean> {
     if (this.enabled) return true;
     if (this.unavailable) return false;
+
+    if (this.context && this.master && this.nodes.size > 0) {
+      try {
+        if (typeof this.context.resume === "function") await this.context.resume();
+        this.enabled = true;
+        this.master.gain.value = 0.72;
+        this.applyMix(this.lastMix);
+        return true;
+      } catch {
+        this.unavailable = true;
+        this.enabled = false;
+        return false;
+      }
+    }
+
     try {
       const factory = this.contextFactory ?? (() => {
         const Ctor = (globalThis as any).AudioContext ?? (globalThis as any).webkitAudioContext;
@@ -112,6 +130,7 @@ export class ProductionAudio {
         this.unavailable = true;
         return false;
       }
+      this.contextCount += 1;
       this.master = this.context.createGain();
       this.master.gain.value = 0.72;
       this.master.connect(this.context.destination);
@@ -153,6 +172,8 @@ export class ProductionAudio {
       severityGain: this.lastMix.collapseMusic,
       mix: { ...this.lastMix },
       channels: VACUUM_AUDIO_CHANNELS,
+      nodeCount: this.nodes.size,
+      contextCount: this.contextCount,
     };
   }
 
