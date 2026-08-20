@@ -1,10 +1,6 @@
 name: Phase 0 Runtime Gate
 
 on:
-  push:
-    branches:
-      - main
-      - phase0-runtime-foundation
   pull_request:
     branches:
       - main
