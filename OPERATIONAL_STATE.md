@@ -2,7 +2,7 @@
 
 project_id: `orbital_scrapper`
 project_name: `Orbital Scrapper`
-revision: 6
+revision: 7
 repository: `westkitty/orbital_scrapper`
 default_branch: `main`
 
@@ -14,11 +14,11 @@ Greenfield physics-driven salvage game governed by `BUILD_CONTRACT.md`, with exe
 
 - `BUILD_CONTRACT.md` is the authoritative gameplay/build specification.
 - `IMPLEMENTATION_PLAN.md` is the authoritative staged execution sequence for that contract.
-- Phases 0, 1, 2, and 3 are implemented and verified on `main`.
+- Phases 0, 1, 2, 3, and 4 are implemented and verified on `main`.
 - Current accepted runtime foundation: Three.js `0.185.0` + vanilla TypeScript `7.0.2` + Vite `8.2.1`, with `@dimforge/rapier3d-compat` `0.19.3` as physics authority.
 - `docs/PHASE0_ARCHITECTURE.md` records the accepted Phase 0 architecture and proof.
-- The current player-facing greybox is the Phase 3 salvage-craft cutter scene around the six-component modular wreck.
-- No Phase 4+ gameplay system is verified yet.
+- The current player-facing greybox is the Phase 4 salvage-craft cutter/tether scene around the six-component modular wreck.
+- No Phase 5+ gameplay system is verified yet.
 
 ## Artifact contract
 
@@ -54,12 +54,16 @@ Implementation must advance one gated phase at a time. A later phase must not de
 - INV-020: A completed cut removes exactly one live Rapier joint. It must not delete, hide, teleport, or replace the connected rigid bodies or wreck components.
 - INV-021: Cutter progress advances through the fixed-step simulation path and requires valid range and aim. Incomplete progress is cleared when targeting conditions are lost, and a completed cut requires cutter release before another cut can begin.
 - INV-022: Post-cut motion remains rigid-body simulation. The current greybox cutter uses a bounded equal-and-opposite release impulse after joint removal; separation is not scripted through transforms.
+- INV-023: Tether manipulation acts through bounded equal-and-opposite Rapier impulses advanced on the fixed-step path. Tether gameplay must not translate, teleport, or directly pose wreck components.
+- INV-024: Tether load is finite and observable. Demand above the configured proof limit must release/snap rather than apply unlimited force, and the tether must require input release before re-engagement after overload.
+- INV-025: Tether release and reset are explicit lifecycle boundaries: releasing the control removes active tether influence immediately, and reset restores an idle tether plus the exact physical wreck baseline.
+- INV-026: Phase 4 post-cut auto-targeting may favor the recorded removable side of the severed connection, but it must not infer or masquerade as the structural graph. Topological reasoning begins in Phase 5.
 
 ## Verified working behavior
 
 ### Phase 0 — Runtime, physics, and reset foundation
 
-Originally verified by GitHub Actions `Phase 0 Runtime Gate`, run `32326833764`. Rechecked after Phase 3 by `Phase 0 Regression Gate`, run `32331609228`:
+Originally verified by GitHub Actions `Phase 0 Runtime Gate`, run `32326833764`. Rechecked after Phase 4 by `Phase 0 Regression Gate`, run `32333422141`:
 
 - exact declared Three.js, Rapier, TypeScript, and Vite dependencies install successfully;
 - the fixed-step simulation target remains approximately `1/60` second within expected numeric precision;
@@ -74,7 +78,7 @@ The original Phase 0 browser smoke remains historical proof that the Phase 0 bui
 
 ### Phase 1 — Salvage craft flight
 
-Originally verified by GitHub Actions `Phase 1 Flight Gate`, run `32328133794`. Rechecked after Phase 3 by `Phase 1 Regression Gate`, run `32331609216`:
+Originally verified by GitHub Actions `Phase 1 Flight Gate`, run `32328133794`. Rechecked after Phase 4 by `Phase 1 Regression Gate`, run `32333422125`:
 
 - the craft remains a dynamic Rapier rigid body with a real collider, continuous collision detection, and no gravity in the flight test volume;
 - held input exposes forward/reverse, strafe, vertical translation, pitch, yaw, roll, braking, and reset actions;
@@ -89,7 +93,7 @@ The original Phase 1 browser smoke remains historical proof that live Chrome key
 
 ### Phase 2 — Modular wreck physics
 
-Originally verified by GitHub Actions `Phase 2 Wreck Gate`, run `32328786755`. Rechecked after Phase 3 by `Phase 2 Regression Gate`, run `32331609248`:
+Originally verified by GitHub Actions `Phase 2 Wreck Gate`, run `32328786755`. Rechecked after Phase 4 by `Phase 2 Regression Gate`, run `32333422174`:
 
 - the reference wreck contains six dynamic wreck components with stable IDs: `spine`, `engine`, `panel`, `left-rail`, `right-rail`, and `rear-node`;
 - the intact baseline contains six explicit Rapier fixed joints with stable connection IDs;
@@ -103,27 +107,43 @@ Originally verified by GitHub Actions `Phase 2 Wreck Gate`, run `32328786755`. R
 - twenty repeated Phase 2 presentation rebuilds preserve exactly one presentation object per active physics body;
 - TypeScript checking and the production Vite build continue to pass.
 
-The original Phase 2 browser smoke remains historical proof of live approach, counter-thrust braking, retreat, and reset against the six-component wreck. The Phase 2 regression workflow now protects the intact-wreck subsystem while the player-facing scene has advanced to cutting.
+The original Phase 2 browser smoke remains historical proof of live approach, counter-thrust braking, retreat, and reset against the six-component wreck. The Phase 2 regression workflow protects the intact-wreck subsystem while the player-facing scene has advanced.
 
 ### Phase 3 — Cutting and physical separation
 
-Verified by GitHub Actions `Phase 3 Cutting Gate`, run `32331609212`:
+Originally verified by GitHub Actions `Phase 3 Cutting Gate`, run `32331609212`. Rechecked after Phase 4 by `Phase 3 Regression Gate`, run `32333422189`:
 
-- twenty-five of twenty-five combined Phase 0 through Phase 3 tests pass;
-- exactly two existing wreck connections are designated cuttable in the Phase 3 proof fixture: `spine-panel` as `low-risk` and `spine-engine` as `large-mass`;
-- non-cuttable branch structure such as `left-rail-rear` rejects sever requests and leaves all six live joints and all six wreck components intact;
-- the cutter acquires live connection targets from current physical attachment points and enforces a nine-meter range plus an aim-alignment threshold;
-- cutter progress advances at the fixed simulation step for a bounded greybox duration and resets when valid targeting/range conditions are lost before completion;
-- a completed low-risk panel cut removes exactly the `spine-panel` Rapier joint while preserving all seven physics bodies and all six wreck components;
-- a completed large-mass engine cut removes exactly the `spine-engine` Rapier joint while preserving the heavy engine as a dynamic physical body;
-- both sides of a completed cut are awakened and remain under Rapier simulation;
-- the current greybox cut applies a bounded equal-and-opposite release impulse after joint removal, producing measurable physical separation without transform scripting or component deletion;
-- a completed cutter action latches until the player releases `C`, preventing one held input from cascading immediately into another cut;
-- twelve repeated cut-then-reset cycles restore the exact original six connection IDs once each, clear sever history, and restore near-zero intact-joint error;
-- the existing Phase 0–2 tests also pass in the same full Phase 3 suite;
+- exactly two existing wreck connections remain designated cuttable in the current proof fixture: `spine-panel` as `low-risk` and `spine-engine` as `large-mass`;
+- non-cuttable branch structure rejects sever requests without changing bodies or live joints;
+- the cutter acquires live connection targets from current physical attachment points and enforces the verified range/aim/duration rules;
+- incomplete cut progress clears when valid targeting conditions are lost;
+- completed panel and engine cuts remove exactly their selected Rapier joints while preserving all seven physics bodies and all six wreck components;
+- newly unconstrained bodies wake and remain under Rapier simulation;
+- post-cut separation remains physical rather than transform-scripted;
+- cutter completion remains single-shot until `C` is released;
+- repeated cut/reset reconstruction continues to restore the original six connection IDs exactly once;
+- TypeScript checking and the production Vite build continue to pass.
+
+The original Phase 3 browser smoke remains historical proof of interrupted hold, completed panel cut, physical separation, and exact `6 -> 5 -> 6` reset. The Phase 3 regression workflow now protects cutting while the player-facing scene includes tethering.
+
+### Phase 4 — Tether manipulation and bracing
+
+Verified by GitHub Actions `Phase 4 Tether Gate`, run `32333422171`:
+
+- thirty-two of thirty-two combined Phase 0 through Phase 4 tests pass;
+- `T` is a held tether action integrated into the existing input lifecycle without duplicating listeners or disturbing six-degree-of-freedom flight and cutter input;
+- the tether can explicitly attach to a live physical wreck component within the proof range and develops a measurable bounded tension while held;
+- releasing `T` immediately returns the tether to idle, clears its target and active tension, and records a manual release;
+- the tether winch pulls a physically detached panel toward the craft through equal-and-opposite Rapier impulses without changing transforms directly or deleting bodies;
+- matched simulations prove the tether arrests and redirects an outward-drifting detached panel relative to the untethered control case;
+- excessive demanded load produces a `snapped` overload state rather than unlimited force, applies no further tether impulse while snapped, and requires control release before reuse;
+- a tether can be attached to the still-connected panel before the same `spine-panel` cut; the matched braced and unbraced simulations produce materially different post-cut panel motion, proving bracing changes the physical outcome;
+- the completed-cut targeting regression proves held tether selection favors the recorded removable `componentB` side of the severed Phase 3 connection rather than accidentally reacquiring the spine; this is a fixture convention, not structural-graph reasoning;
+- twelve repeated tether/cut/reset cycles restore an idle tether, all seven bodies, all six wreck components, and the exact original six live connection IDs;
 - production TypeScript checking and Vite build pass;
-- the built app initializes in headless Google Chrome with seven bodies, six wreck components, six live joints, and two designated cuttable joints;
-- live Chrome keyboard input proves a short `C` hold interrupts without severing, a sustained `C` hold removes the panel joint, the severed panel develops measurable separation while all bodies remain, and `X` restores the exact six-joint baseline (`6 -> 5 -> 6`).
+- the Phase 4 production JavaScript build is approximately `2.790 MB` minified / `982.76 KB` gzip;
+- the built app initializes in headless Google Chrome with the Phase 4 scene, completes a real panel cut, acquires the detached panel with `T`, produces positive bounded tension and reduces tether distance while held, releases cleanly, and restores the exact baseline with `X` (`6 -> 5 -> 6` joints, seven bodies retained);
+- Phase 0, Phase 1, Phase 2, and Phase 3 regression gates all pass on the same final Phase 4 head.
 
 ## Implemented but unverified
 
@@ -131,17 +151,20 @@ None for the current authorized phase boundary.
 
 ## Known not-working behavior
 
-None established in the accepted Phase 0–3 scope.
+None established in the accepted Phase 0–4 scope.
 
 ## Known observations / deferred maintenance
 
-- Phase 3 production JavaScript is approximately `2.785 MB` minified / `981.53 KB` gzip. Bundle reduction and code splitting remain deferred until they become relevant to a later performance gate; do not treat this as a Phase 3 failure.
+- Phase 4 production JavaScript is approximately `2.790 MB` minified / `982.76 KB` gzip. Bundle reduction and code splitting remain deferred until they become relevant to a later performance gate; do not treat this as a Phase 4 failure.
 - Rapier emits an initialization deprecation warning in tests. Behavior is verified; API cleanup remains deferred.
 - GitHub Actions warns about deprecated internal Node 20 runtimes in `actions/checkout@v4` and `actions/setup-node@v4`; the hosted runner forces Node 24 and the gates pass. CI-action maintenance is deferred.
 - Phase 1 handling constants remain accepted greybox proof values, not final tuning.
 - Phase 2 wreck geometry, mass classes, and attachment positions are proof fixtures, not production content.
 - Phase 3 cutter range, aim threshold, duration, cut classifications, and release-impulse values are greybox proof values rather than final game tuning.
+- Phase 4 tether range, aim threshold, minimum length, winch speed, spring/damping constants, and seventy-newton overload limit are proof values rather than production tuning.
 - The first Phase 2 candidate renamed the managed presenter root and correctly failed the Phase 1 lifecycle regression test. The repair restored the protected root identity without changing wreck physics. Future presenter renames must migrate lifecycle proof deliberately rather than bypass it.
+- The first Phase 4 candidate failed shared TypeScript checking because a class-field target remained nullable after attachment. The repair narrowed that already-established target without changing behavior.
+- The next Phase 4 browser attempt caught a real targeting defect: both sides of a severed connection were favored, so the tether acquired the spine instead of the detached panel. The repair favors the recorded removable `componentB` side and adds a direct regression fixture; the complete five-gate set then passed.
 
 ## Unknown / unresolved
 
@@ -150,10 +173,11 @@ None established in the accepted Phase 0–3 scope.
 - final camera model beyond the current presentation-only chase camera
 - art direction details and palette
 - economy tuning
-- simultaneous tether count beyond initial proof
+- final simultaneous tether count beyond the current single active proof tether
 - save format
 - final production wreck module dimensions, masses, attachment layouts, and materials
 - final cutter tuning, presentation, energy/heat model, and whether release impulse remains part of production cutting behavior
+- final tether tuning, presentation, targeting UX, failure model, and whether the proof spring/damping winch remains the production tether model
 
 ## Resolved decisions
 
@@ -165,7 +189,7 @@ None established in the accepted Phase 0–3 scope.
 - simulation authority: Rapier; Three.js presentation mirrors physics transforms
 - Phase 1 flight authority: dynamic Rapier craft body controlled by fixed-step forces and torques
 - Phase 1 braking model: bounded counter-force and counter-torque, preserving nonzero stopping distance
-- current greybox controls: `W/S` thrust, `A/D` strafe, `R/F` vertical, arrow keys pitch/yaw, `Q/E` roll, `Space` brake, `C` cutter hold, `X` reset
+- current greybox controls: `W/S` thrust, `A/D` strafe, `R/F` vertical, arrow keys pitch/yaw, `Q/E` roll, `Space` brake, `C` cutter hold, `T` tether hold, `X` reset
 - Phase 2 wreck authority: dynamic Rapier component bodies connected by explicit Rapier joints
 - Phase 2 component identity: stable component IDs plus reusable local attachment-point IDs
 - Phase 2 reference topology: six components and six physical joints, including two alternate rear load paths
@@ -173,27 +197,32 @@ None established in the accepted Phase 0–3 scope.
 - Phase 3 cuttable proof targets: `spine-panel` (`low-risk`) and `spine-engine` (`large-mass`); remaining reference-wreck joints are non-cuttable at this phase
 - Phase 3 greybox cutter requirements: nine-meter maximum range, `0.92` aim cosine, and `0.75` seconds continuous valid hold before completion
 - Phase 3 completion behavior: equal-and-opposite rigid-body release impulse plus wake-up, with cutter release required before another cut may begin
+- Phase 4 tether authority: a single active fixed-step spring/damping winch implemented as bounded equal-and-opposite Rapier impulses between craft and target body
+- Phase 4 proof tether limits: eleven-meter acquisition range, `0.75` aim cosine, `2.5` meter minimum target length, `2.2 m/s` winch rate, and seventy-newton overload threshold
+- Phase 4 tether lifecycle: hold `T` to attach/maintain, release `T` for clean teardown; overload snaps and requires release before re-engagement
+- Phase 4 post-cut salvage targeting convention: a completed Phase 3 cut records the removable fixture side as `componentB`, which the tether may favor without performing graph analysis
 
 ## Pending work
 
-### Phase 4 — Tether manipulation and bracing
+### Phase 5 — Structural graph synchronization
 
 This is the only authorized next implementation phase under the current staged plan.
 
 Required proof set:
 
-- target and attach a tether to a physical wreck component or detached component;
-- implement tether influence through a temporary Rapier constraint or bounded physical force rather than transform movement;
-- support explicit tether release and clean constraint/force teardown;
-- expose tension or a physically meaningful tension proxy;
-- enforce a finite load limit with readable release, snap, overheat, or equivalent failure behavior rather than unlimited force;
-- prove the tether can pull a detached object toward the ship;
-- prove the tether can arrest or redirect a drifting detached object before collision;
-- prove the tether can brace an attached wreck section before a cut;
-- compare the same relevant cut with and without the brace and prove the tether materially changes the resulting motion;
-- re-run the Phase 3 exact-joint cut, physical-separation, interruption, and reset path as the immediate regression check;
-- preserve Phase 0–2 regression gates;
-- do not begin structural-graph reasoning, scanner criticality, collapse escalation, cargo, economy, or production presentation until the Phase 4 gate passes.
+- introduce a `StructuralGraph` or equivalent explicit ownership boundary after, not instead of, the proven physical representation;
+- synchronize one graph node to every current wreck component without creating a second source of truth for physics transforms;
+- synchronize graph edges to the current intact physical Rapier connections;
+- support connected-section queries and an explainable topology method such as bridge/articulation analysis;
+- recompute only the affected structural region where practical while preserving correctness over optimization;
+- represent active tether braces as temporary structural support information without mutating permanent wreck topology;
+- prove graph node IDs exactly match live wreck component IDs;
+- prove graph edge IDs exactly match live intact physical connection IDs;
+- prove cutting a connection updates both the physical joint state and synchronized graph state;
+- prove reset restores the original graph exactly once with no duplicate nodes or edges;
+- prove adding/removing a tether brace updates temporary support state without corrupting permanent graph topology;
+- repeat the verified Phase 3 cut and Phase 4 tether/bracing tests while inspecting synchronized graph state;
+- do not begin scanner criticality, collapse escalation, cargo, economy, or production presentation until the Phase 5 gate passes.
 
 ## Staged implementation sequence
 
@@ -201,9 +230,9 @@ Required proof set:
 2. Phase 1 — Salvage craft flight — **verified**
 3. Phase 2 — Modular wreck physics — **verified**
 4. Phase 3 — Cutting and physical separation — **verified**
-5. Phase 4 — Tether manipulation and bracing — **authorized next**
-6. Phase 5 — Structural graph synchronization — blocked by Phase 4
-7. Phase 6 — Scanner and structural criticality — blocked
+5. Phase 4 — Tether manipulation and bracing — **verified**
+6. Phase 5 — Structural graph synchronization — **authorized next**
+7. Phase 6 — Scanner and structural criticality — blocked by Phase 5
 8. Phase 7 — Collapse escalation and survival damage — blocked
 9. Phase 8 — Cargo capture, condition, and settlement — blocked
 10. Phase 9 — Upgrade, persistence, and complete vertical slice — blocked
@@ -217,22 +246,23 @@ Each phase requires focused direct testing plus the smallest relevant regression
 
 | ID | Claim | State | Required proof |
 |---|---|---|---|
-| VAL-000 | Runtime foundation is suitable | verified | Phase 0 runtime proof `32326833764`; current Phase 0 regression `32331609228` |
+| VAL-000 | Runtime foundation is suitable | verified | Phase 0 runtime proof `32326833764`; current Phase 0 regression `32333422141` |
 | VAL-001 | Full salvage loop works | pending | Direct runtime completion without debug controls |
-| VAL-002 | Structural graph tracks physical cuts | pending | Runtime cut + graph/constraint inspection |
+| VAL-002 | Structural graph tracks physical cuts | pending | Phase 5 synchronized graph + runtime cut + graph/constraint inspection |
 | VAL-003 | Dangerous cut produces simulated cascade | pending | Direct runtime observation |
-| VAL-004 | Tether changes dangerous outcome | pending | Matched runtime comparison |
-| VAL-005 | Reset is clean | verified through Phase 3 | Phase 0–3 repeated physics, connection, input, and presentation reset/lifecycle tests |
+| VAL-004 | Tether changes dangerous outcome | verified | Phase 4 run `32333422171`: matched braced/unbraced `spine-panel` cut produces materially different physical motion |
+| VAL-005 | Reset is clean | verified through Phase 4 | Phase 0–4 repeated physics, connection, input, presentation, cutter, and tether reset/lifecycle tests |
 | VAL-006 | Progression changes next run | pending | Save/settlement runtime proof |
-| VAL-007 | Phase gates are respected | verified through Phase 3 | Each phase remained isolated until its focused gate plus affected regressions passed |
-| VAL-008 | Salvage craft flight is controllable | verified | Phase 1 proof `32328133794`; current Phase 1 regression `32331609216` |
-| VAL-009 | Modular wreck remains coherent and stable | verified | Phase 2 proof `32328786755`; current Phase 2 regression `32331609248` |
-| VAL-010 | Cutting removes the intended physical connection and produces natural separation | verified | Phase 3 run `32331609212`: valid/invalid targeting + interruption + panel/engine sever + body preservation + separation + reset + Chrome path |
-| VAL-011 | Tether manipulation and bracing materially change physical outcomes | pending | Phase 4 pull/arrest/brace matched runtime comparisons plus cleanup/reset |
+| VAL-007 | Phase gates are respected | verified through Phase 4 | Each phase remained isolated until its focused gate plus affected regressions passed |
+| VAL-008 | Salvage craft flight is controllable | verified | Phase 1 proof `32328133794`; current Phase 1 regression `32333422125` |
+| VAL-009 | Modular wreck remains coherent and stable | verified | Phase 2 proof `32328786755`; current Phase 2 regression `32333422174` |
+| VAL-010 | Cutting removes the intended physical connection and produces natural separation | verified | Phase 3 proof `32331609212`; current Phase 3 regression `32333422189` |
+| VAL-011 | Tether manipulation and bracing materially change physical outcomes | verified | Phase 4 run `32333422171`: physical attach/pull/arrest + finite overload + brace comparison + reset + live Chrome path |
+| VAL-012 | Structural graph mirrors current live topology and temporary support state | pending | Phase 5 node/edge synchronization + cut/reset/tether-support regression proof |
 
 ## Prohibitions
 
-- Do not claim Phase 4+ gameplay systems are implemented or working before runtime evidence exists.
+- Do not claim Phase 5+ gameplay systems are implemented or working before runtime evidence exists.
 - Do not broaden first-playable scope before core-loop gates pass.
 - Do not substitute scripted spectacle for structural simulation.
 - Do not hand-roll a physics engine.
@@ -240,15 +270,20 @@ Each phase requires focused direct testing plus the smallest relevant regression
 - Do not use production art, audio, or content expansion to mask unresolved greybox gameplay or physics failures.
 - Do not move physics authority into Three.js presentation transforms.
 - Do not replace physical craft movement with free-camera translation or direct transform movement.
-- Do not treat physical connection metadata as the structural graph; graph reasoning begins only after the tether phase is verified.
 - Do not delete components to simulate a successful cut; completed cuts remove joints and leave physical bodies in simulation.
-- Do not implement tether movement by teleporting or directly setting component transforms; Phase 4 must influence motion through Rapier constraints or bounded physical forces.
+- Do not implement tether movement by teleporting or directly setting component transforms; tether influence remains bounded physical simulation.
+- Do not author a structural graph that can silently diverge from the current physical wreck. Phase 5 graph state must synchronize to live component/connection state and treat tether braces as temporary support information rather than permanent wreck topology.
+- Do not begin scanner criticality or player risk prediction in Phase 5; those remain Phase 6 work.
 
 ## Revision history
 
+### Revision 7 — 2026-08-20
+
+Phase 4 passed `Phase 4 Tether Gate` run `32333422171`, while `Phase 0 Regression Gate` run `32333422141`, `Phase 1 Regression Gate` run `32333422125`, `Phase 2 Regression Gate` run `32333422174`, and `Phase 3 Regression Gate` run `32333422189` also passed on the same final head. Promoted bounded fixed-step physical tethering, manual release, finite overload snap/rearm behavior, detached-object pull, drift arrest/redirection, matched brace-vs-unbraced cut effects, repeated tether/cut/reset cleanup, production build, and live Chrome cut/tether/pull/release/reset behavior to verified state. The Phase 4 gate first exposed a nullable TypeScript target and then a live auto-target defect that selected the spine after a panel cut; both were repaired without weakening the physics contract, and a direct severed-salvage-side targeting regression test was added. The verified implementation was squash-merged to `main` as `8c774c59415c1aee8714236ae3b7576e652257c4`. Phase 5 — Structural Graph Synchronization is now the only authorized implementation phase.
+
 ### Revision 6 — 2026-08-20
 
-Phase 3 passed `Phase 3 Cutting Gate` run `32331609212`, while `Phase 0 Regression Gate` run `32331609228`, `Phase 1 Regression Gate` run `32331609216`, and `Phase 2 Regression Gate` run `32331609248` also passed. Promoted explicit cuttable-connection classification, fixed-step target/range/aim cutter progression, interruption behavior, exact Rapier joint removal, body preservation, low-risk panel and large-mass engine cuts, bounded physical post-cut separation, single-shot cutter latching, repeated cut/reset reconstruction, production build, and live Chrome interrupted-hold/cut/separation/reset behavior to verified state. The verified implementation was squash-merged to `main` as `506c65d9838ff8472ae9b36f0b161dc4da5a0164`. Phase 4 — Tether Manipulation and Bracing is now the only authorized implementation phase.
+Phase 3 passed `Phase 3 Cutting Gate` run `32331609212`, while `Phase 0 Regression Gate` run `32331609228`, `Phase 1 Regression Gate` run `32331609216`, and `Phase 2 Regression Gate` run `32331609248` also passed. Promoted explicit cuttable-connection classification, fixed-step target/range/aim cutter progression, interruption behavior, exact Rapier joint removal, body preservation, low-risk panel and large-mass engine cuts, bounded physical post-cut separation, single-shot cutter latching, repeated cut/reset reconstruction, production build, and live Chrome interrupted-hold/cut/separation/reset behavior to verified state. The verified implementation was squash-merged to `main` as `506c65d9838ff8472ae9b36f0b161dc4da5a0164`. Phase 4 — Tether Manipulation and Bracing became the only authorized implementation phase.
 
 ### Revision 5 — 2026-08-19
 
