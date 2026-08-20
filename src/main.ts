@@ -8,6 +8,7 @@ import { FIXED_TIMESTEP_SECONDS } from "./physics/PhysicsSandbox.js";
 import { FlightScenePresenter } from "./presentation/FlightScenePresenter.js";
 import { FixedStepLoop } from "./runtime/FixedStepLoop.js";
 import { FlightInputBindings } from "./runtime/FlightInputBindings.js";
+import { SCANNER_RANGE_METERS, ScannerSystem } from "./scanner/ScannerSystem.js";
 import { StructuralGraph } from "./structure/StructuralGraph.js";
 import { TETHER_MAX_TENSION_NEWTONS, TETHER_RANGE_METERS, TetherSystem } from "./tether/TetherSystem.js";
 
@@ -15,13 +16,13 @@ const app = document.querySelector("#app");
 if (!app) throw new Error("Missing #app root");
 
 app.innerHTML = `
-  <section class="viewport" aria-label="Phase 5 structural graph synchronization viewport"></section>
-  <aside class="panel" aria-label="Phase 5 structural graph diagnostics and salvage controls">
-    <p class="eyebrow">ORBITAL SCRAPPER // PHASE 5</p>
-    <h1>Structural Graph Synchronization</h1>
-    <p class="copy">The physical wreck remains authoritative. A synchronized graph now mirrors live modules and joints, while active tether braces appear only as temporary support state.</p>
+  <section class="viewport" aria-label="Phase 6 scanner and structural criticality viewport"></section>
+  <aside class="panel" aria-label="Phase 6 scanner diagnostics and salvage controls">
+    <p class="eyebrow">ORBITAL SCRAPPER // PHASE 6</p>
+    <h1>Scanner & Structural Criticality</h1>
+    <p class="copy">The scanner reads current graph and physics state, then gives an estimated risk with explicit reasons. It does not drive physics and it is not an oracle.</p>
 
-    <div class="control-grid" aria-label="Flight, cutter, and tether controls">
+    <div class="control-grid" aria-label="Flight, cutter, tether, and passive scanner controls">
       <div><strong>Thrust</strong><span><kbd>W</kbd>/<kbd>S</kbd></span></div>
       <div><strong>Strafe</strong><span><kbd>A</kbd>/<kbd>D</kbd></span></div>
       <div><strong>Vertical</strong><span><kbd>R</kbd>/<kbd>F</kbd></span></div>
@@ -30,11 +31,25 @@ app.innerHTML = `
       <div><strong>Brake</strong><span><kbd>Space</kbd></span></div>
       <div><strong>Cutter</strong><span><kbd>C</kbd> hold</span></div>
       <div><strong>Tether</strong><span><kbd>T</kbd> hold</span></div>
+      <div><strong>Scanner</strong><span>passive aim</span></div>
     </div>
 
     <button id="reset" type="button">Reset wreck scene <kbd>X</kbd></button>
 
     <dl class="diagnostics">
+      <div><dt>Scanner target</dt><dd id="diag-scan-target">—</dd></div>
+      <div><dt>Relationship</dt><dd id="diag-scan-relationship">—</dd></div>
+      <div><dt>Scanned object</dt><dd id="diag-scan-object">—</dd></div>
+      <div><dt>Component type</dt><dd id="diag-scan-type">—</dd></div>
+      <div><dt>Mass class</dt><dd id="diag-scan-mass">—</dd></div>
+      <div><dt>Placeholder value</dt><dd id="diag-scan-value">—</dd></div>
+      <div><dt>Likely free</dt><dd id="diag-scan-free">—</dd></div>
+      <div><dt>Bridge / alternate</dt><dd id="diag-scan-path">—</dd></div>
+      <div><dt>Temporary support</dt><dd id="diag-scan-support">—</dd></div>
+      <div><dt>Relative motion</dt><dd id="diag-scan-motion">—</dd></div>
+      <div><dt>Predicted risk</dt><dd id="diag-scan-risk">—</dd></div>
+      <div><dt>Risk score</dt><dd id="diag-scan-score">—</dd></div>
+      <div><dt>Estimate basis</dt><dd id="diag-scan-reasons">—</dd></div>
       <div><dt>Speed</dt><dd id="diag-speed">—</dd></div>
       <div><dt>Wreck distance</dt><dd id="diag-distance">—</dd></div>
       <div><dt>Position</dt><dd id="diag-position">—</dd></div>
@@ -67,8 +82,8 @@ app.innerHTML = `
       <div><dt>Input</dt><dd id="diag-input">neutral</dd></div>
     </dl>
 
-    <p class="course" id="course">The graph starts with six nodes and six physical edges. Cut the panel and watch one graph edge disappear while the panel node remains.</p>
-    <p class="status" id="status" role="status">Initializing structural graph…</p>
+    <p class="course" id="course">Aim at a live connection. The scanner explains what is attached, what may become free, and why the current cut estimate is low, moderate, or high.</p>
+    <p class="status" id="status" role="status">Initializing structural scanner…</p>
   </aside>
 `;
 
@@ -109,6 +124,11 @@ const cutMarker = new THREE.Mesh(
 cutMarker.visible = false;
 scene.add(cutMarker);
 
+const scannerMarkerMaterial = new THREE.MeshBasicMaterial({ color: 0x38bdf8, wireframe: true });
+const scannerMarker = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 10), scannerMarkerMaterial);
+scannerMarker.visible = false;
+scene.add(scannerMarker);
+
 const tetherPositions = new Float32Array(6);
 const tetherGeometry = new THREE.BufferGeometry();
 tetherGeometry.setAttribute("position", new THREE.BufferAttribute(tetherPositions, 3));
@@ -124,6 +144,7 @@ const controller = new FlightController();
 const cutter = new CuttingSystem();
 const tether = new TetherSystem();
 const graph = new StructuralGraph();
+const scanner = new ScannerSystem();
 graph.sync(sandbox, tether.getDiagnostics(sandbox));
 const presenter = new FlightScenePresenter(scene);
 presenter.rebuild(sandbox);
@@ -183,6 +204,17 @@ function updateCutMarker(cut) {
   cutMarker.position.set(point.x, point.y, point.z);
 }
 
+function updateScannerMarker(scan) {
+  if (scan.state !== "locked" || !sandbox.hasConnection(scan.connectionId)) {
+    scannerMarker.visible = false;
+    return;
+  }
+  const point = sandbox.getConnectionWorldPoint(scan.connectionId);
+  scannerMarker.visible = true;
+  scannerMarker.position.set(point.x, point.y, point.z);
+  scannerMarkerMaterial.color.setHex(scan.riskLevel === "high" ? 0xef4444 : scan.riskLevel === "moderate" ? 0xf59e0b : 0x22c55e);
+}
+
 function updateTetherLine(tetherDiagnostics) {
   if (tetherDiagnostics.state !== "attached" || !tetherDiagnostics.targetId) {
     tetherLine.visible = false;
@@ -206,9 +238,40 @@ function updateDiagnostics() {
   const tetherDiagnostics = tether.getDiagnostics(sandbox);
   graph.sync(sandbox, tetherDiagnostics);
   const graphDiagnostics = graph.getDiagnostics();
+  const scan = scanner.scan(sandbox, graph, tetherDiagnostics, cut.targetId);
   const flightState = input?.getState?.() ?? { forward: 0, strafe: 0, vertical: 0, pitch: 0, yaw: 0, roll: 0, brake: false };
   const cutActive = input?.isCutActive?.() ?? false;
   const tetherActive = input?.isTetherActive?.() ?? false;
+
+  if (scan.state === "locked") {
+    document.querySelector("#diag-scan-target").textContent = scan.connectionId;
+    document.querySelector("#diag-scan-relationship").textContent = scan.relationship;
+    document.querySelector("#diag-scan-object").textContent = scan.displayComponentId;
+    document.querySelector("#diag-scan-type").textContent = scan.componentType;
+    document.querySelector("#diag-scan-mass").textContent = scan.massClass;
+    document.querySelector("#diag-scan-value").textContent = `${scan.placeholderValueUnits} units`;
+    document.querySelector("#diag-scan-free").textContent = scan.likelyFreeComponentIds.join(", ") || "none — alternate path remains";
+    document.querySelector("#diag-scan-path").textContent = scan.bridge ? "bridge / sole path" : "alternate path remains";
+    document.querySelector("#diag-scan-support").textContent = scan.temporarySupport ? "active" : "none";
+    document.querySelector("#diag-scan-motion").textContent = `${scan.relativeSpeed.toFixed(2)} m/s`;
+    document.querySelector("#diag-scan-risk").textContent = `${scan.riskLevel} estimate`;
+    document.querySelector("#diag-scan-score").textContent = `${Math.round(scan.riskScore)}/100`;
+    document.querySelector("#diag-scan-reasons").textContent = scan.reasons.join(" | ");
+  } else {
+    document.querySelector("#diag-scan-target").textContent = "none";
+    document.querySelector("#diag-scan-relationship").textContent = "—";
+    document.querySelector("#diag-scan-object").textContent = "—";
+    document.querySelector("#diag-scan-type").textContent = "—";
+    document.querySelector("#diag-scan-mass").textContent = "—";
+    document.querySelector("#diag-scan-value").textContent = "—";
+    document.querySelector("#diag-scan-free").textContent = "—";
+    document.querySelector("#diag-scan-path").textContent = "—";
+    document.querySelector("#diag-scan-support").textContent = "—";
+    document.querySelector("#diag-scan-motion").textContent = "—";
+    document.querySelector("#diag-scan-risk").textContent = "no estimate";
+    document.querySelector("#diag-scan-score").textContent = "—";
+    document.querySelector("#diag-scan-reasons").textContent = scan.reasons.join(" | ");
+  }
 
   document.querySelector("#diag-speed").textContent = `${diagnostics.linearSpeed.toFixed(2)} m/s`;
   document.querySelector("#diag-distance").textContent = `${diagnostics.distanceToWreck.toFixed(2)} m`;
@@ -242,31 +305,35 @@ function updateDiagnostics() {
   document.querySelector("#diag-input").textContent = describeInput(flightState, cutActive, tetherActive);
 
   if (graphDiagnostics.nodeCount !== diagnostics.wreckComponentCount || graphDiagnostics.edgeCount !== diagnostics.wreckConnectionCount) {
-    course.textContent = "Graph/physics mismatch detected. Phase 5 must not proceed with divergent topology.";
-    status.textContent = "Structural graph synchronization failure.";
+    course.textContent = "Graph/physics mismatch detected. Scanner output is not trustworthy while topology diverges.";
+    status.textContent = "Structural synchronization failure; prediction withheld.";
   } else if (tetherDiagnostics.state === "snapped") {
-    course.textContent = `Tether overload exceeded ${TETHER_MAX_TENSION_NEWTONS.toFixed(0)} N. Temporary graph support is removed until re-engagement.`;
-    status.textContent = "Tether snapped; permanent graph topology remains unchanged.";
-  } else if (tetherDiagnostics.state === "attached") {
-    course.textContent = `Temporary support active on ${tetherDiagnostics.targetId}. Permanent edges remain tied only to live wreck joints.`;
-    status.textContent = "Graph mirrors physical topology plus one temporary tether support.";
+    course.textContent = `Tether overload exceeded ${TETHER_MAX_TENSION_NEWTONS.toFixed(0)} N. Scanner support state clears with the failed tether.`;
+    status.textContent = scan.state === "locked" ? `Current prediction: ${scan.riskLevel} estimate without active support.` : "Scanner has no valid target.";
+  } else if (tetherDiagnostics.state === "attached" && scan.state === "locked") {
+    course.textContent = `Temporary support on ${tetherDiagnostics.targetId} is included in the ${scan.connectionId} estimate. Release T to compare the unsupported prediction.`;
+    status.textContent = `Supported prediction: ${scan.riskLevel} (${Math.round(scan.riskScore)}/100), not a guarantee.`;
   } else if (cut.state === "complete") {
-    course.textContent = `Cut complete: ${cut.lastCompletedConnectionId}. Graph now has ${graphDiagnostics.edgeCount} live edges while all ${graphDiagnostics.nodeCount} component nodes remain.`;
-    status.textContent = "Physical joint removal and graph edge removal are synchronized.";
-  } else if (diagnostics.distanceToWreck > CUTTER_RANGE_METERS) {
-    course.textContent = `Approach under control. Cutter range is ${CUTTER_RANGE_METERS.toFixed(0)} m; tether range is ${TETHER_RANGE_METERS.toFixed(0)} m.`;
-    status.textContent = "Graph is synchronized; salvage tools are outside working range.";
+    course.textContent = scan.state === "locked"
+      ? `Cut complete: ${cut.lastCompletedConnectionId}. Scanner dropped that stale edge and reacquired ${scan.connectionId}.`
+      : `Cut complete: ${cut.lastCompletedConnectionId}. The severed connection is no longer a scanner target.`;
+    status.textContent = "Scanner refreshed from current live topology after physical joint removal.";
+  } else if (scan.state === "locked") {
+    course.textContent = `${scan.relationship}: ${scan.riskLevel} estimate. Likely free: ${scan.likelyFreeComponentIds.join(", ") || "none because an alternate path remains"}.`;
+    status.textContent = `Prediction uses live topology, mass, relative motion, and temporary support. Scanner range ${SCANNER_RANGE_METERS.toFixed(0)} m.`;
+  } else if (diagnostics.distanceToWreck > SCANNER_RANGE_METERS) {
+    course.textContent = `Approach under control. Scanner range is ${SCANNER_RANGE_METERS.toFixed(0)} m; cutter range is ${CUTTER_RANGE_METERS.toFixed(0)} m; tether range is ${TETHER_RANGE_METERS.toFixed(0)} m.`;
+    status.textContent = "No scanner estimate outside current proof range.";
   } else if (!cut.canCut) {
-    course.textContent = `Aim toward the marked cut joint. Current bridge set: ${graphDiagnostics.bridgeConnectionIds.join(", ") || "none"}.`;
-    status.textContent = "Topology queries are live; scanner risk prediction is intentionally not implemented yet.";
-  } else if (cut.state === "cutting") {
-    course.textContent = `Cutting ${cut.targetId}: ${Math.round(cut.progress01 * 100)}%. Graph changes only when the physical joint actually disappears.`;
-    status.textContent = "Structural graph is following the live wreck, not predicting it.";
+    course.textContent = `Aim toward a live connection. Required cutter alignment remains ${CUTTER_AIM_COSINE.toFixed(2)} when cutting.`;
+    status.textContent = "Scanner searches all live graph edges; cutter eligibility remains separate.";
   } else {
-    course.textContent = `Graph synchronized: ${graphDiagnostics.nodeCount} nodes, ${graphDiagnostics.edgeCount} edges, ${graphDiagnostics.bridgeConnectionIds.length} bridges.`;
-    status.textContent = "Physical wreck remains authoritative; graph is ready for structural reasoning tests.";
+    course.textContent = "Scanner is searching current live connections.";
+    status.textContent = "No target lock; no prediction is being asserted.";
   }
+
   updateCutMarker(cut);
+  updateScannerMarker(scan);
   updateTetherLine(tetherDiagnostics);
 }
 
@@ -289,7 +356,7 @@ function frame(now) {
 
 presenter.updateCamera(sandbox, camera);
 updateDiagnostics();
-document.body.dataset.phase5 = "ready";
+document.body.dataset.phase6 = "ready";
 requestAnimationFrame(frame);
 
 window.addEventListener("beforeunload", () => {
@@ -307,6 +374,8 @@ window.addEventListener("beforeunload", () => {
   else axesHelper.material.dispose();
   cutMarker.geometry.dispose();
   cutMarker.material.dispose();
+  scannerMarker.geometry.dispose();
+  scannerMarker.material.dispose();
   tetherGeometry.dispose();
   tetherLine.material.dispose();
   renderer.dispose();
