@@ -10,7 +10,7 @@ export type ScannerRiskLevel = "low" | "moderate" | "high";
 export type ScannerEstimate = {
   state: "locked"; connectionId: string; componentAId: string; componentBId: string; relationship: string; displayComponentId: string;
   componentType: WreckComponentType; massClass: WreckMassClass; placeholderValueUnits: number; cargoFragilityMultiplier: number;
-  distanceMeters: number; aimAlignment: number; cuttable: boolean; bridge: boolean; alternateLoadPath: boolean; articulationEndpointIds: readonly string[];
+  distanceMeters: number; aimAlignment: number; cuttable: boolean; bridge: boolean; isBridge: boolean; alternateLoadPath: boolean; articulationEndpointIds: readonly string[];
   likelyFreeComponentIds: readonly string[]; estimatedFreeMass: number; relativeSpeed: number; temporarySupport: boolean; riskScore: number;
   riskLevel: ScannerRiskLevel; confidence: "estimate"; reasons: readonly string[]; topologyRevision: number; supportRevision: number;
 };
@@ -74,7 +74,7 @@ export class ScannerSystem {
     else if (displayComponent.cargoFragilityMultiplier <= 0.8) reasons.push(`Recovered ${displayComponent.componentType} is robust: cargo impact condition loss is ${displayComponent.cargoFragilityMultiplier.toFixed(2)}x baseline.`);
     if (!edge.cuttable) reasons.push("This connection is not currently cutter-eligible, but its structural consequence can still be inspected.");
     score = clamp(score, 0, 100);
-    return { state: "locked", connectionId, componentAId: edge.componentAId, componentBId: edge.componentBId, relationship: `${edge.componentAId} ↔ ${edge.componentBId}`, displayComponentId, componentType: displayComponent.componentType, massClass: displayComponent.massClass, placeholderValueUnits, cargoFragilityMultiplier: displayComponent.cargoFragilityMultiplier, distanceMeters: distance, aimAlignment, cuttable: edge.cuttable, bridge, alternateLoadPath: !bridge, articulationEndpointIds, likelyFreeComponentIds: likelyFree, estimatedFreeMass, relativeSpeed, temporarySupport: support !== null, riskScore: score, riskLevel: riskLevel(score), confidence: "estimate", reasons, topologyRevision: graphDiagnostics.topologyRevision, supportRevision: graphDiagnostics.supportRevision };
+    return { state: "locked", connectionId, componentAId: edge.componentAId, componentBId: edge.componentBId, relationship: `${edge.componentAId} ↔ ${edge.componentBId}`, displayComponentId, componentType: displayComponent.componentType, massClass: displayComponent.massClass, placeholderValueUnits, cargoFragilityMultiplier: displayComponent.cargoFragilityMultiplier, distanceMeters: distance, aimAlignment, cuttable: edge.cuttable, bridge, isBridge: bridge, alternateLoadPath: !bridge, articulationEndpointIds, likelyFreeComponentIds: likelyFree, estimatedFreeMass, relativeSpeed, temporarySupport: support !== null, riskScore: score, riskLevel: riskLevel(score), confidence: "estimate", reasons, topologyRevision: graphDiagnostics.topologyRevision, supportRevision: graphDiagnostics.supportRevision };
   }
   private selectTarget(sandbox: WreckSandbox, graph: StructuralGraph, preferredConnectionId?: string | null): ScannerCandidate | null {
     const craft = sandbox.getCraftBody(); const position = craft.translation(); const forward = rotateLocalVector(craft.rotation(), { x: 0, y: 0, z: -1 }); let best: ScannerCandidate | null = null;
