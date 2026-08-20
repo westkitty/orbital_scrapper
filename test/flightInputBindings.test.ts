@@ -15,7 +15,7 @@ class FakeKeyboardTarget {
   }
 }
 
-test("flight input bindings expose held six-axis controls and detach cleanly", () => {
+test("flight input bindings expose held six-axis controls, cutter hold, and detach cleanly", () => {
   const target = new FakeKeyboardTarget();
   let resets = 0;
   const input = new FlightInputBindings(target, { reset: () => { resets += 1; } });
@@ -32,6 +32,7 @@ test("flight input bindings expose held six-axis controls and detach cleanly", (
   target.dispatch("keydown", "ArrowDown");
   target.dispatch("keydown", "KeyQ");
   target.dispatch("keydown", "Space");
+  target.dispatch("keydown", "KeyC");
 
   assert.deepEqual(input.getState(), {
     forward: 1,
@@ -42,6 +43,7 @@ test("flight input bindings expose held six-axis controls and detach cleanly", (
     roll: 1,
     brake: true,
   });
+  assert.equal(input.isCutActive(), true);
 
   target.dispatch("keyup", "KeyW");
   target.dispatch("keyup", "KeyD");
@@ -50,6 +52,7 @@ test("flight input bindings expose held six-axis controls and detach cleanly", (
   target.dispatch("keyup", "ArrowDown");
   target.dispatch("keyup", "KeyQ");
   target.dispatch("keyup", "Space");
+  target.dispatch("keyup", "KeyC");
   assert.deepEqual(input.getState(), {
     forward: 0,
     strafe: 0,
@@ -59,6 +62,7 @@ test("flight input bindings expose held six-axis controls and detach cleanly", (
     roll: 0,
     brake: false,
   });
+  assert.equal(input.isCutActive(), false);
 
   target.dispatch("keydown", "KeyX");
   target.dispatch("keydown", "KeyX", true);
@@ -68,4 +72,5 @@ test("flight input bindings expose held six-axis controls and detach cleanly", (
   assert.equal(target.listeners.keydown.size, 0);
   assert.equal(target.listeners.keyup.size, 0);
   assert.equal(input.isAttached(), false);
+  assert.equal(input.isCutActive(), false);
 });

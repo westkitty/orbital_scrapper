@@ -12,6 +12,7 @@ type Vec3 = { x: number; y: number; z: number };
 export type WreckBodyRole = "craft" | "wreck-spine" | "wreck-heavy" | "wreck-light" | "wreck-branch";
 export type WreckComponentType = "spine" | "engine" | "panel" | "rail" | "junction";
 export type WreckMassClass = "light" | "medium" | "heavy";
+export type WreckCutClass = "low-risk" | "large-mass";
 
 export type WreckBodyVisual = {
   size: readonly [number, number, number];
@@ -44,6 +45,22 @@ export type WreckConnectionRecord = {
   localAnchorA: Vec3;
   localAnchorB: Vec3;
   joint: RapierImpulseJoint;
+  cuttable: boolean;
+  cutClass: WreckCutClass | null;
+  releaseImpulse: number;
+};
+
+export type WreckSeveredConnectionRecord = Omit<WreckConnectionRecord, "joint"> & {
+  severedAtSeconds: number;
+};
+
+export type WreckSeverResult = {
+  connectionId: string;
+  severed: boolean;
+  reason: "severed" | "not-cuttable" | "missing";
+  cutClass: WreckCutClass | null;
+  componentAId: string | null;
+  componentBId: string | null;
 };
 
 export type WreckDiagnostics = {
@@ -61,6 +78,8 @@ export type WreckDiagnostics = {
   distanceToWreck: number;
   wreckComponentCount: number;
   wreckConnectionCount: number;
+  wreckCuttableConnectionCount: number;
+  wreckSeveredConnectionCount: number;
   wreckLinearSpeed: number;
   maxConnectionError: number;
 };
@@ -84,6 +103,7 @@ export class WreckSandbox {
   private bodyRecords = new Map<string, WreckBodyRecord>();
   private components = new Map<string, WreckComponentRecord>();
   private connections = new Map<string, WreckConnectionRecord>();
+  private severedConnections = new Map<string, WreckSeveredConnectionRecord>();
   private generation = 0;
   private elapsedSeconds = 0;
   private disposed = false;
@@ -139,8 +159,95 @@ export class WreckSandbox {
     return record;
   }
 
+  hasConnection(id: string): boolean {
+    return this.connections.has(id);
+  }
+
   getConnections(): readonly WreckConnectionRecord[] {
     return [...this.connections.values()];
+  }
+
+  getCuttableConnections(): readonly WreckConnectionRecord[] {
+    return this.getConnections().filter((connection) => connection.cuttable);
+  }
+
+  getSeveredConnections(): readonly WreckSeveredConnectionRecord[] {
+    return [...this.severedConnections.values()];
+  }
+
+  getConnectionWorldPoint(id: string): Vec3 {
+    const connection = this.getConnection(id);
+    const componentA = this.getWreckComponent(connection.componentAId).body;
+    const componentB = this.getWreckComponent(connection.componentBId).body;
+    const worldA = this.worldAnchor(componentA, connection.localAnchorA);
+    const worldB = this.worldAnchor(componentB, connection.localAnchorB);
+    return {
+      x: (worldA.x + worldB.x) * 0.5,
+      y: (worldA.y + worldB.y) * 0.5,
+      z: (worldA.z + worldB.z) * 0.5,
+    };
+  }
+
+  getSeveredConnectionSeparation(id: string): number {
+    const connection = this.severedConnections.get(id);
+    if (!connection) return 0;
+    const componentA = this.getWreckComponent(connection.componentAId).body;
+    const componentB = this.getWreckComponent(connection.componentBId).body;
+    const worldA = this.worldAnchor(componentA, connection.localAnchorA);
+    const worldB = this.worldAnchor(componentB, connection.localAnchorB);
+    return Math.hypot(worldA.x - worldB.x, worldA.y - worldB.y, worldA.z - worldB.z);
+  }
+
+  severConnection(id: string): WreckSeverResult {
+    this.assertAlive();
+    const connection = this.connections.get(id);
+    if (!connection) {
+      return { connectionId: id, severed: false, reason: "missing", cutClass: null, componentAId: null, componentBId: null };
+    }
+    if (!connection.cuttable) {
+      return {
+        connectionId: id,
+        severed: false,
+        reason: "not-cuttable",
+        cutClass: connection.cutClass,
+        componentAId: connection.componentAId,
+        componentBId: connection.componentBId,
+      };
+    }
+
+    const componentA = this.getWreckComponent(connection.componentAId);
+    const componentB = this.getWreckComponent(connection.componentBId);
+    const positionA = componentA.body.translation();
+    const positionB = componentB.body.translation();
+    let direction = { x: positionB.x - positionA.x, y: positionB.y - positionA.y, z: positionB.z - positionA.z };
+    let length = magnitude(direction);
+    if (length < 1e-6) {
+      direction = { x: 1, y: 0, z: 0 };
+      length = 1;
+    }
+    direction = { x: direction.x / length, y: direction.y / length, z: direction.z / length };
+
+    this.world.removeImpulseJoint(connection.joint, true);
+    this.connections.delete(id);
+    const { joint: _joint, ...severed } = connection;
+    this.severedConnections.set(id, { ...severed, severedAtSeconds: this.elapsedSeconds });
+
+    componentA.body.wakeUp();
+    componentB.body.wakeUp();
+    const impulse = connection.releaseImpulse;
+    if (impulse > 0) {
+      componentA.body.applyImpulse({ x: -direction.x * impulse, y: -direction.y * impulse, z: -direction.z * impulse }, true);
+      componentB.body.applyImpulse({ x: direction.x * impulse, y: direction.y * impulse, z: direction.z * impulse }, true);
+    }
+
+    return {
+      connectionId: id,
+      severed: true,
+      reason: "severed",
+      cutClass: connection.cutClass,
+      componentAId: connection.componentAId,
+      componentBId: connection.componentBId,
+    };
   }
 
   getDiagnostics(): WreckDiagnostics {
@@ -169,6 +276,8 @@ export class WreckSandbox {
       distanceToWreck: Math.hypot(position.x - wreckPosition.x, position.y - wreckPosition.y, position.z - wreckPosition.z),
       wreckComponentCount: this.components.size,
       wreckConnectionCount: this.connections.size,
+      wreckCuttableConnectionCount: this.getCuttableConnections().length,
+      wreckSeveredConnectionCount: this.severedConnections.size,
       wreckLinearSpeed: magnitude(wreckVelocity),
       maxConnectionError: this.getMaxConnectionError(),
     };
@@ -193,6 +302,7 @@ export class WreckSandbox {
     this.bodyRecords.clear();
     this.components.clear();
     this.connections.clear();
+    this.severedConnections.clear();
     this.disposed = true;
   }
 
@@ -204,6 +314,7 @@ export class WreckSandbox {
     this.bodyRecords.clear();
     this.components.clear();
     this.connections.clear();
+    this.severedConnections.clear();
     this.elapsedSeconds = 0;
     this.generation += 1;
 
@@ -251,8 +362,8 @@ export class WreckSandbox {
       { id: "right-port", localPosition: { x: 1, y: 0, z: 0.7 } },
     ]);
 
-    this.connect("spine-engine", "spine", "engine-port", "engine", "spine-port");
-    this.connect("spine-panel", "spine", "panel-port", "panel", "spine-port");
+    this.connect("spine-engine", "spine", "engine-port", "engine", "spine-port", { cuttable: true, cutClass: "large-mass", releaseImpulse: 2.2 });
+    this.connect("spine-panel", "spine", "panel-port", "panel", "spine-port", { cuttable: true, cutClass: "low-risk", releaseImpulse: 0.65 });
     this.connect("spine-left-rail", "spine", "left-rail-port", "left-rail", "spine-port");
     this.connect("left-rail-rear", "left-rail", "rear-port", "rear-node", "left-port");
     this.connect("spine-right-rail", "spine", "right-rail-port", "right-rail", "spine-port");
@@ -302,14 +413,34 @@ export class WreckSandbox {
     return body;
   }
 
-  private connect(id: string, componentAId: string, attachmentAId: string, componentBId: string, attachmentBId: string): void {
+  private connect(
+    id: string,
+    componentAId: string,
+    attachmentAId: string,
+    componentBId: string,
+    attachmentBId: string,
+    options: { cuttable?: boolean; cutClass?: WreckCutClass; releaseImpulse?: number } = {},
+  ): void {
     const componentA = this.getWreckComponent(componentAId);
     const componentB = this.getWreckComponent(componentBId);
     const localAnchorA = this.requireAttachment(componentA, attachmentAId).localPosition;
     const localAnchorB = this.requireAttachment(componentB, attachmentBId).localPosition;
     const data = RAPIER.JointData.fixed(localAnchorA, IDENTITY, localAnchorB, IDENTITY);
     const joint = this.world.createImpulseJoint(data, componentA.body, componentB.body, true);
-    this.connections.set(id, { id, componentAId, attachmentAId, componentBId, attachmentBId, localAnchorA, localAnchorB, joint });
+    const cuttable = options.cuttable ?? false;
+    this.connections.set(id, {
+      id,
+      componentAId,
+      attachmentAId,
+      componentBId,
+      attachmentBId,
+      localAnchorA,
+      localAnchorB,
+      joint,
+      cuttable,
+      cutClass: cuttable ? (options.cutClass ?? null) : null,
+      releaseImpulse: cuttable ? (options.releaseImpulse ?? 0) : 0,
+    });
   }
 
   private requireAttachment(component: WreckComponentRecord, attachmentId: string): WreckAttachmentPoint {
