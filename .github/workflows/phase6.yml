@@ -1,4 +1,4 @@
-name: Phase 6 Scanner Gate
+name: Phase 6 Regression Gate
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  verify-phase6:
+  verify-phase6-regression:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -28,5 +28,5 @@ jobs:
       - name: Verify resolved core versions
         run: npm ls three @dimforge/rapier3d-compat vite typescript
 
-      - name: Run Phase 6 gate
-        run: npm run verify:phase6
+      - name: Run Phase 6 regression gate
+        run: npm run verify:phase6-regression
