@@ -159,6 +159,9 @@ export class CollapseSystem {
   }
 
   private processContactEvents(sandbox: WreckSandbox): { bodyId: string; impulse: number } | null {
+    this.lastImpactBodyId = null;
+    this.lastImpactForceNewtons = 0;
+    this.lastImpactImpulse = 0;
     this.lastImpactDamage = 0;
     let strongestCraftImpact: { bodyId: string; force: number; impulse: number } | null = null;
     const componentIds = new Set(
