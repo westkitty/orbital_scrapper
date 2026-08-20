@@ -12,7 +12,7 @@ export type FlightInputActions = {
 const CONTROL_CODES = new Set([
   "KeyW", "KeyS", "KeyA", "KeyD", "KeyR", "KeyF",
   "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
-  "KeyQ", "KeyE", "Space", "KeyC", "KeyX",
+  "KeyQ", "KeyE", "Space", "KeyC", "KeyT", "KeyX",
 ]);
 
 export class FlightInputBindings {
@@ -49,6 +49,10 @@ export class FlightInputBindings {
 
   isCutActive(): boolean {
     return this.pressed.has("KeyC");
+  }
+
+  isTetherActive(): boolean {
+    return this.pressed.has("KeyT");
   }
 
   getState(): FlightInput {

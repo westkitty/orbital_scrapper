@@ -8,18 +8,19 @@ import { FIXED_TIMESTEP_SECONDS } from "./physics/PhysicsSandbox.js";
 import { FlightScenePresenter } from "./presentation/FlightScenePresenter.js";
 import { FixedStepLoop } from "./runtime/FixedStepLoop.js";
 import { FlightInputBindings } from "./runtime/FlightInputBindings.js";
+import { TETHER_MAX_TENSION_NEWTONS, TETHER_RANGE_METERS, TetherSystem } from "./tether/TetherSystem.js";
 
 const app = document.querySelector("#app");
 if (!app) throw new Error("Missing #app root");
 
 app.innerHTML = `
-  <section class="viewport" aria-label="Phase 3 cutting and physical separation viewport"></section>
-  <aside class="panel" aria-label="Phase 3 cutter controls and diagnostics">
-    <p class="eyebrow">ORBITAL SCRAPPER // PHASE 3</p>
-    <h1>Cutting & Physical Separation</h1>
-    <p class="copy">Aim the craft at a designated joint, hold the cutter in range, and sever the real Rapier constraint. Components remain physical after separation.</p>
+  <section class="viewport" aria-label="Phase 4 tether manipulation and bracing viewport"></section>
+  <aside class="panel" aria-label="Phase 4 tether controls and diagnostics">
+    <p class="eyebrow">ORBITAL SCRAPPER // PHASE 4</p>
+    <h1>Tether Manipulation & Bracing</h1>
+    <p class="copy">Cut a component loose, then hold the tether to pull or arrest it. The same bounded physical tether can brace an attached section before a cut.</p>
 
-    <div class="control-grid" aria-label="Flight and cutter controls">
+    <div class="control-grid" aria-label="Flight, cutter, and tether controls">
       <div><strong>Thrust</strong><span><kbd>W</kbd>/<kbd>S</kbd></span></div>
       <div><strong>Strafe</strong><span><kbd>A</kbd>/<kbd>D</kbd></span></div>
       <div><strong>Vertical</strong><span><kbd>R</kbd>/<kbd>F</kbd></span></div>
@@ -27,6 +28,7 @@ app.innerHTML = `
       <div><strong>Roll</strong><span><kbd>Q</kbd>/<kbd>E</kbd></span></div>
       <div><strong>Brake</strong><span><kbd>Space</kbd></span></div>
       <div><strong>Cutter</strong><span><kbd>C</kbd> hold</span></div>
+      <div><strong>Tether</strong><span><kbd>T</kbd> hold</span></div>
     </div>
 
     <button id="reset" type="button">Reset wreck scene <kbd>X</kbd></button>
@@ -40,21 +42,24 @@ app.innerHTML = `
       <div><dt>Cuttable joints</dt><dd id="diag-cuttable">—</dd></div>
       <div><dt>Severed joints</dt><dd id="diag-severed">—</dd></div>
       <div><dt>Cut target</dt><dd id="diag-cut-target">—</dd></div>
-      <div><dt>Cut class</dt><dd id="diag-cut-class">—</dd></div>
-      <div><dt>Target range</dt><dd id="diag-cut-range">—</dd></div>
-      <div><dt>Aim</dt><dd id="diag-cut-aim">—</dd></div>
       <div><dt>Cutter state</dt><dd id="diag-cut-state">—</dd></div>
       <div><dt>Cut progress</dt><dd id="diag-cut-progress">—</dd></div>
       <div><dt>Last cut</dt><dd id="diag-last-cut">—</dd></div>
-      <div><dt>Separation</dt><dd id="diag-cut-separation">—</dd></div>
+      <div><dt>Tether target</dt><dd id="diag-tether-target">—</dd></div>
+      <div><dt>Tether state</dt><dd id="diag-tether-state">—</dd></div>
+      <div><dt>Tether range</dt><dd id="diag-tether-distance">—</dd></div>
+      <div><dt>Target length</dt><dd id="diag-tether-length">—</dd></div>
+      <div><dt>Tension</dt><dd id="diag-tether-tension">—</dd></div>
+      <div><dt>Load</dt><dd id="diag-tether-load">—</dd></div>
+      <div><dt>Tether release</dt><dd id="diag-tether-release">—</dd></div>
       <div><dt>Max joint error</dt><dd id="diag-joint-error">—</dd></div>
       <div><dt>Rigid bodies</dt><dd id="diag-bodies">—</dd></div>
       <div><dt>Fixed step</dt><dd id="diag-step">—</dd></div>
       <div><dt>Input</dt><dd id="diag-input">neutral</dd></div>
     </dl>
 
-    <p class="course" id="course">The green panel joint is the low-risk cut. The orange engine joint is the large-mass cut. Aim with the craft and hold <kbd>C</kbd>.</p>
-    <p class="status" id="status" role="status">Initializing cutter scene…</p>
+    <p class="course" id="course">Cut the green panel loose with <kbd>C</kbd>, release the cutter, then hold <kbd>T</kbd> to reel the detached salvage toward the ship.</p>
+    <p class="status" id="status" role="status">Initializing tether scene…</p>
   </aside>
 `;
 
@@ -95,9 +100,20 @@ const cutMarker = new THREE.Mesh(
 cutMarker.visible = false;
 scene.add(cutMarker);
 
+const tetherPositions = new Float32Array(6);
+const tetherGeometry = new THREE.BufferGeometry();
+tetherGeometry.setAttribute("position", new THREE.BufferAttribute(tetherPositions, 3));
+const tetherLine = new THREE.Line(
+  tetherGeometry,
+  new THREE.LineBasicMaterial({ color: 0x7dd3fc }),
+);
+tetherLine.visible = false;
+scene.add(tetherLine);
+
 const sandbox = await WreckSandbox.create();
 const controller = new FlightController();
 const cutter = new CuttingSystem();
+const tether = new TetherSystem();
 const presenter = new FlightScenePresenter(scene);
 presenter.rebuild(sandbox);
 const loop = new FixedStepLoop(FIXED_TIMESTEP_SECONDS, 5);
@@ -108,6 +124,7 @@ let disposed = false;
 function resetScene() {
   sandbox.reset();
   cutter.reset();
+  tether.reset();
   loop.reset();
   input.clear();
   presenter.rebuild(sandbox);
@@ -127,7 +144,7 @@ function resize() {
 }
 window.addEventListener("resize", resize);
 
-function describeInput(state, cutActive) {
+function describeInput(state, cutActive, tetherActive) {
   const active = [];
   if (state.forward > 0) active.push("forward");
   if (state.forward < 0) active.push("reverse");
@@ -140,6 +157,7 @@ function describeInput(state, cutActive) {
   if (state.roll !== 0) active.push("roll");
   if (state.brake) active.push("brake");
   if (cutActive) active.push("cut");
+  if (tetherActive) active.push("tether");
   return active.length ? active.join(" + ") : "neutral";
 }
 
@@ -153,11 +171,30 @@ function updateCutMarker(cut) {
   cutMarker.position.set(point.x, point.y, point.z);
 }
 
+function updateTetherLine(tetherDiagnostics) {
+  if (tetherDiagnostics.state !== "attached" || !tetherDiagnostics.targetId) {
+    tetherLine.visible = false;
+    return;
+  }
+  const craft = sandbox.getCraftBody().translation();
+  const target = sandbox.getWreckComponent(tetherDiagnostics.targetId).body.translation();
+  tetherPositions[0] = craft.x;
+  tetherPositions[1] = craft.y;
+  tetherPositions[2] = craft.z;
+  tetherPositions[3] = target.x;
+  tetherPositions[4] = target.y;
+  tetherPositions[5] = target.z;
+  tetherGeometry.attributes.position.needsUpdate = true;
+  tetherLine.visible = true;
+}
+
 function updateDiagnostics() {
   const diagnostics = sandbox.getDiagnostics();
   const cut = cutter.getDiagnostics(sandbox);
+  const tetherDiagnostics = tether.getDiagnostics(sandbox);
   const flightState = input?.getState?.() ?? { forward: 0, strafe: 0, vertical: 0, pitch: 0, yaw: 0, roll: 0, brake: false };
   const cutActive = input?.isCutActive?.() ?? false;
+  const tetherActive = input?.isTetherActive?.() ?? false;
 
   document.querySelector("#diag-speed").textContent = `${diagnostics.linearSpeed.toFixed(2)} m/s`;
   document.querySelector("#diag-distance").textContent = `${diagnostics.distanceToWreck.toFixed(2)} m`;
@@ -167,35 +204,45 @@ function updateDiagnostics() {
   document.querySelector("#diag-cuttable").textContent = String(diagnostics.wreckCuttableConnectionCount);
   document.querySelector("#diag-severed").textContent = String(diagnostics.wreckSeveredConnectionCount);
   document.querySelector("#diag-cut-target").textContent = cut.targetId ?? "none";
-  document.querySelector("#diag-cut-class").textContent = cut.targetClass ?? "none";
-  document.querySelector("#diag-cut-range").textContent = Number.isFinite(cut.targetDistance) ? `${cut.targetDistance.toFixed(2)} m` : "—";
-  document.querySelector("#diag-cut-aim").textContent = Number.isFinite(cut.aimAlignment) ? cut.aimAlignment.toFixed(3) : "—";
   document.querySelector("#diag-cut-state").textContent = cut.state;
   document.querySelector("#diag-cut-progress").textContent = `${Math.round(cut.progress01 * 100)}%`;
   document.querySelector("#diag-last-cut").textContent = cut.lastCompletedConnectionId ?? "none";
-  document.querySelector("#diag-cut-separation").textContent = `${cut.lastSeparationDistance.toFixed(3)} m`;
+  document.querySelector("#diag-tether-target").textContent = tetherDiagnostics.targetId ?? "none";
+  document.querySelector("#diag-tether-state").textContent = tetherDiagnostics.state;
+  document.querySelector("#diag-tether-distance").textContent = Number.isFinite(tetherDiagnostics.targetDistance) ? `${tetherDiagnostics.targetDistance.toFixed(2)} m` : "—";
+  document.querySelector("#diag-tether-length").textContent = tetherDiagnostics.targetLength > 0 ? `${tetherDiagnostics.targetLength.toFixed(2)} m` : "—";
+  document.querySelector("#diag-tether-tension").textContent = `${tetherDiagnostics.tensionNewtons.toFixed(1)} N`;
+  document.querySelector("#diag-tether-load").textContent = `${Math.round(tetherDiagnostics.loadRatio * 100)}%`;
+  document.querySelector("#diag-tether-release").textContent = tetherDiagnostics.lastReleaseReason ?? "none";
   document.querySelector("#diag-joint-error").textContent = `${(diagnostics.maxConnectionError * 1000).toFixed(2)} mm`;
   document.querySelector("#diag-bodies").textContent = String(diagnostics.activeBodies);
   document.querySelector("#diag-step").textContent = `${(diagnostics.fixedTimestepSeconds * 1000).toFixed(2)} ms`;
-  document.querySelector("#diag-input").textContent = describeInput(flightState, cutActive);
+  document.querySelector("#diag-input").textContent = describeInput(flightState, cutActive, tetherActive);
 
-  if (cut.state === "complete") {
-    course.textContent = `Cut complete: ${cut.lastCompletedConnectionId}. The body remains physical; release C before attempting another cut.`;
+  if (tetherDiagnostics.state === "snapped") {
+    course.textContent = `Tether overload exceeded ${TETHER_MAX_TENSION_NEWTONS.toFixed(0)} N. Release T before re-engaging.`;
+    status.textContent = "Tether snapped under finite load; no force is being applied.";
+  } else if (tetherDiagnostics.state === "attached") {
+    course.textContent = `Tethered to ${tetherDiagnostics.targetId}: ${tetherDiagnostics.tensionNewtons.toFixed(1)} N. Release T for clean teardown.`;
+    status.textContent = "Bounded equal-and-opposite tether impulses are active through Rapier.";
+  } else if (cut.state === "complete") {
+    course.textContent = `Cut complete: ${cut.lastCompletedConnectionId}. Release C, then hold T to capture the detached component.`;
     status.textContent = `Joint severed. ${diagnostics.wreckConnectionCount} live structural joints remain.`;
   } else if (diagnostics.distanceToWreck > CUTTER_RANGE_METERS) {
-    course.textContent = `Approach under control. Cutter range is ${CUTTER_RANGE_METERS.toFixed(0)} m.`;
-    status.textContent = "Cutter ready; target is outside working range.";
+    course.textContent = `Approach under control. Cutter range is ${CUTTER_RANGE_METERS.toFixed(0)} m; tether range is ${TETHER_RANGE_METERS.toFixed(0)} m.`;
+    status.textContent = "Salvage tools ready; target is outside working range.";
   } else if (!cut.canCut) {
-    course.textContent = `Aim the craft toward the marked joint. Required aim alignment: ${CUTTER_AIM_COSINE.toFixed(2)}.`;
-    status.textContent = "Cutter ready; hold aim and range before cutting.";
+    course.textContent = `Aim toward the marked cut joint. Required cutter alignment: ${CUTTER_AIM_COSINE.toFixed(2)}.`;
+    status.textContent = "Cutter ready; tether can engage a component with T when in range.";
   } else if (cut.state === "cutting") {
     course.textContent = `Cutting ${cut.targetId}: ${Math.round(cut.progress01 * 100)}%. Leaving range or aim interrupts progress.`;
     status.textContent = "Cutter engaged on a live Rapier joint.";
   } else {
-    course.textContent = `Target locked: ${cut.targetId} (${cut.targetClass}). Hold C to sever the physical joint.`;
-    status.textContent = "Cutter ready; valid joint target acquired.";
+    course.textContent = `Cut target locked: ${cut.targetId}. Hold C to sever it, or hold T to brace a component before cutting.`;
+    status.textContent = "Cutter and tether are ready.";
   }
   updateCutMarker(cut);
+  updateTetherLine(tetherDiagnostics);
 }
 
 function frame(now) {
@@ -204,6 +251,7 @@ function frame(now) {
   lastTime = now;
   loop.advance(delta, () => {
     cutter.step(sandbox, input.isCutActive());
+    tether.step(sandbox, input.isTetherActive());
     sandbox.step(controller, input.getState());
   });
   presenter.sync(sandbox);
@@ -215,7 +263,7 @@ function frame(now) {
 
 presenter.updateCamera(sandbox, camera);
 updateDiagnostics();
-document.body.dataset.phase3 = "ready";
+document.body.dataset.phase4 = "ready";
 requestAnimationFrame(frame);
 
 window.addEventListener("beforeunload", () => {
@@ -233,5 +281,7 @@ window.addEventListener("beforeunload", () => {
   else axesHelper.material.dispose();
   cutMarker.geometry.dispose();
   cutMarker.material.dispose();
+  tetherGeometry.dispose();
+  tetherLine.material.dispose();
   renderer.dispose();
 }, { once: true });

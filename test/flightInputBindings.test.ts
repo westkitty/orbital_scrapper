@@ -15,7 +15,7 @@ class FakeKeyboardTarget {
   }
 }
 
-test("flight input bindings expose held six-axis controls, cutter hold, and detach cleanly", () => {
+test("flight input bindings expose held six-axis controls, cutter/tether holds, and detach cleanly", () => {
   const target = new FakeKeyboardTarget();
   let resets = 0;
   const input = new FlightInputBindings(target, { reset: () => { resets += 1; } });
@@ -33,6 +33,7 @@ test("flight input bindings expose held six-axis controls, cutter hold, and deta
   target.dispatch("keydown", "KeyQ");
   target.dispatch("keydown", "Space");
   target.dispatch("keydown", "KeyC");
+  target.dispatch("keydown", "KeyT");
 
   assert.deepEqual(input.getState(), {
     forward: 1,
@@ -44,15 +45,11 @@ test("flight input bindings expose held six-axis controls, cutter hold, and deta
     brake: true,
   });
   assert.equal(input.isCutActive(), true);
+  assert.equal(input.isTetherActive(), true);
 
-  target.dispatch("keyup", "KeyW");
-  target.dispatch("keyup", "KeyD");
-  target.dispatch("keyup", "KeyR");
-  target.dispatch("keyup", "ArrowLeft");
-  target.dispatch("keyup", "ArrowDown");
-  target.dispatch("keyup", "KeyQ");
-  target.dispatch("keyup", "Space");
-  target.dispatch("keyup", "KeyC");
+  for (const code of ["KeyW", "KeyD", "KeyR", "ArrowLeft", "ArrowDown", "KeyQ", "Space", "KeyC", "KeyT"]) {
+    target.dispatch("keyup", code);
+  }
   assert.deepEqual(input.getState(), {
     forward: 0,
     strafe: 0,
@@ -63,6 +60,7 @@ test("flight input bindings expose held six-axis controls, cutter hold, and deta
     brake: false,
   });
   assert.equal(input.isCutActive(), false);
+  assert.equal(input.isTetherActive(), false);
 
   target.dispatch("keydown", "KeyX");
   target.dispatch("keydown", "KeyX", true);
@@ -73,4 +71,5 @@ test("flight input bindings expose held six-axis controls, cutter hold, and deta
   assert.equal(target.listeners.keyup.size, 0);
   assert.equal(input.isAttached(), false);
   assert.equal(input.isCutActive(), false);
+  assert.equal(input.isTetherActive(), false);
 });
