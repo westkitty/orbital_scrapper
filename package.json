@@ -21,6 +21,7 @@
     "smoke:phase2": "node scripts/phase2-smoke.mjs",
     "smoke:phase3": "node scripts/phase3-smoke.mjs",
     "smoke:phase4": "node scripts/phase4-smoke.mjs",
+    "smoke:phase5": "node scripts/phase5-smoke.mjs",
     "verify:phase0": "npm run verify:phase0-regression",
     "verify:phase0-regression": "npm run test:phase0 && npm run build",
     "verify:phase1": "npm run verify:phase1-regression",
@@ -30,7 +31,8 @@
     "verify:phase3": "npm run verify:phase3-regression",
     "verify:phase3-regression": "npm run test:phase3 && npm run build",
     "verify:phase4": "npm run verify:phase4-regression",
-    "verify:phase4-regression": "npm run test:phase4 && npm run build"
+    "verify:phase4-regression": "npm run test:phase4 && npm run build",
+    "verify:phase5": "npm run test && npm run build && npm run smoke:phase5"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.19.3",
