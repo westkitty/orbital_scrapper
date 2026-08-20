@@ -2,7 +2,9 @@ import type { FlightInput } from "../flight/FlightController.js";
 
 export type FlightKeyboardTarget = {
   addEventListener(type: "keydown" | "keyup", listener: (event: KeyboardEvent) => void): void;
+  addEventListener(type: "blur", listener: (event: Event) => void): void;
   removeEventListener(type: "keydown" | "keyup", listener: (event: KeyboardEvent) => void): void;
+  removeEventListener(type: "blur", listener: (event: Event) => void): void;
 };
 
 export type FlightInputActions = {
@@ -14,6 +16,14 @@ const CONTROL_CODES = new Set([
   "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
   "KeyQ", "KeyE", "Space", "KeyC", "KeyT", "KeyX",
 ]);
+
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  if (!target || typeof target !== "object") return false;
+  const element = target as { tagName?: unknown; isContentEditable?: boolean };
+  if (element.isContentEditable) return true;
+  const tagName = typeof element.tagName === "string" ? element.tagName.toUpperCase() : "";
+  return tagName === "BUTTON" || tagName === "INPUT" || tagName === "SELECT" || tagName === "TEXTAREA";
+}
 
 export class FlightInputBindings {
   private readonly pressed = new Set<string>();
@@ -28,6 +38,7 @@ export class FlightInputBindings {
     if (this.attached) return;
     this.target.addEventListener("keydown", this.onKeyDown);
     this.target.addEventListener("keyup", this.onKeyUp);
+    this.target.addEventListener("blur", this.onBlur);
     this.attached = true;
   }
 
@@ -35,6 +46,7 @@ export class FlightInputBindings {
     if (!this.attached) return;
     this.target.removeEventListener("keydown", this.onKeyDown);
     this.target.removeEventListener("keyup", this.onKeyUp);
+    this.target.removeEventListener("blur", this.onBlur);
     this.pressed.clear();
     this.attached = false;
   }
@@ -72,7 +84,7 @@ export class FlightInputBindings {
   }
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
-    if (!CONTROL_CODES.has(event.code)) return;
+    if (!CONTROL_CODES.has(event.code) || isInteractiveTarget(event.target)) return;
     event.preventDefault?.();
     if (event.code === "KeyX") {
       if (!event.repeat) this.actions.reset();
@@ -83,7 +95,11 @@ export class FlightInputBindings {
 
   private readonly onKeyUp = (event: KeyboardEvent): void => {
     if (!CONTROL_CODES.has(event.code)) return;
-    event.preventDefault?.();
     this.pressed.delete(event.code);
+    if (!isInteractiveTarget(event.target)) event.preventDefault?.();
+  };
+
+  private readonly onBlur = (): void => {
+    this.pressed.clear();
   };
 }
