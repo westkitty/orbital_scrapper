@@ -8,6 +8,10 @@ export const CUTTER_RANGE_METERS = 9;
 export const CUTTER_AIM_COSINE = 0.92;
 export const CUTTER_DURATION_SECONDS = 0.75;
 
+export type CuttingSystemOptions = {
+  rangeMeters?: number;
+};
+
 export type CuttingState = "idle" | "tracking" | "blocked" | "cutting" | "complete";
 
 export type CuttingDiagnostics = {
@@ -16,6 +20,7 @@ export type CuttingDiagnostics = {
   targetClass: WreckCutClass | null;
   targetDistance: number;
   aimAlignment: number;
+  rangeMeters: number;
   canCut: boolean;
   progress01: number;
   lastCompletedConnectionId: string | null;
@@ -37,6 +42,10 @@ function dot(a: Vec3, b: Vec3): number {
   return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
+function validPositive(value: number): boolean {
+  return Number.isFinite(value) && value > 0;
+}
+
 export class CuttingSystem {
   private state: CuttingState = "idle";
   private targetId: string | null = null;
@@ -47,6 +56,18 @@ export class CuttingSystem {
   private progressTargetId: string | null = null;
   private lastCompletedConnectionId: string | null = null;
   private requiresRelease = false;
+  private rangeMeters: number;
+
+  constructor(options: CuttingSystemOptions = {}) {
+    const configured = options.rangeMeters ?? CUTTER_RANGE_METERS;
+    if (!validPositive(configured)) throw new Error("Cutter range must be positive and finite");
+    this.rangeMeters = configured;
+  }
+
+  setRangeMeters(value: number): void {
+    if (!validPositive(value)) throw new Error("Cutter range must be positive and finite");
+    this.rangeMeters = value;
+  }
 
   reset(): void {
     this.state = "idle";
@@ -85,7 +106,7 @@ export class CuttingSystem {
       return;
     }
 
-    const canCut = candidate.distance <= CUTTER_RANGE_METERS && candidate.aimAlignment >= CUTTER_AIM_COSINE;
+    const canCut = candidate.distance <= this.rangeMeters && candidate.aimAlignment >= CUTTER_AIM_COSINE;
     if (!active) {
       this.progressSeconds = 0;
       this.progressTargetId = null;
@@ -128,7 +149,7 @@ export class CuttingSystem {
   getDiagnostics(sandbox: WreckSandbox): CuttingDiagnostics {
     const canCut = this.targetId !== null
       && sandbox.hasConnection(this.targetId)
-      && this.targetDistance <= CUTTER_RANGE_METERS
+      && this.targetDistance <= this.rangeMeters
       && this.aimAlignment >= CUTTER_AIM_COSINE;
     return {
       state: this.state,
@@ -136,6 +157,7 @@ export class CuttingSystem {
       targetClass: this.targetClass,
       targetDistance: this.targetDistance,
       aimAlignment: this.aimAlignment,
+      rangeMeters: this.rangeMeters,
       canCut,
       progress01: Math.min(1, this.progressSeconds / CUTTER_DURATION_SECONDS),
       lastCompletedConnectionId: this.lastCompletedConnectionId,
@@ -163,7 +185,7 @@ export class CuttingSystem {
       const candidate = { connection, distance, aimAlignment, score };
 
       if (!bestFallback || candidate.score > bestFallback.score) bestFallback = candidate;
-      const eligible = distance <= CUTTER_RANGE_METERS && aimAlignment >= CUTTER_AIM_COSINE;
+      const eligible = distance <= this.rangeMeters && aimAlignment >= CUTTER_AIM_COSINE;
       if (eligible && (!bestEligible || candidate.score > bestEligible.score)) bestEligible = candidate;
     }
 

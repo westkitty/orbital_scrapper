@@ -12,6 +12,10 @@ export const TETHER_SPRING_NEWTONS_PER_METER = 12;
 export const TETHER_DAMPING_NEWTONS_PER_METER_PER_SECOND = 3.5;
 export const TETHER_MAX_TENSION_NEWTONS = 70;
 
+export type TetherSystemOptions = {
+  maxTensionNewtons?: number;
+};
+
 export type TetherState = "idle" | "blocked" | "attached" | "snapped";
 export type TetherReleaseReason = "manual" | "overload" | null;
 
@@ -22,6 +26,7 @@ export type TetherDiagnostics = {
   aimAlignment: number;
   targetLength: number;
   tensionNewtons: number;
+  maxTensionNewtons: number;
   loadRatio: number;
   canAttach: boolean;
   lastReleaseReason: TetherReleaseReason;
@@ -56,6 +61,10 @@ function normalize(vector: Vec3): Vec3 {
   return scale(vector, 1 / length);
 }
 
+function validPositive(value: number): boolean {
+  return Number.isFinite(value) && value > 0;
+}
+
 export class TetherSystem {
   private state: TetherState = "idle";
   private targetId: string | null = null;
@@ -65,6 +74,18 @@ export class TetherSystem {
   private tensionNewtons = 0;
   private requiresRelease = false;
   private lastReleaseReason: TetherReleaseReason = null;
+  private maxTensionNewtons: number;
+
+  constructor(options: TetherSystemOptions = {}) {
+    const configured = options.maxTensionNewtons ?? TETHER_MAX_TENSION_NEWTONS;
+    if (!validPositive(configured)) throw new Error("Tether max tension must be positive and finite");
+    this.maxTensionNewtons = configured;
+  }
+
+  setMaxTensionNewtons(value: number): void {
+    if (!validPositive(value)) throw new Error("Tether max tension must be positive and finite");
+    this.maxTensionNewtons = value;
+  }
 
   reset(): void {
     this.state = "idle";
@@ -173,7 +194,7 @@ export class TetherSystem {
         + radialSpeed * TETHER_DAMPING_NEWTONS_PER_METER_PER_SECOND,
     );
 
-    if (demandedTension > TETHER_MAX_TENSION_NEWTONS) {
+    if (demandedTension > this.maxTensionNewtons) {
       this.state = "snapped";
       this.tensionNewtons = 0;
       this.requiresRelease = true;
@@ -216,7 +237,8 @@ export class TetherSystem {
       aimAlignment,
       targetLength: this.targetLength,
       tensionNewtons: this.tensionNewtons,
-      loadRatio: this.tensionNewtons / TETHER_MAX_TENSION_NEWTONS,
+      maxTensionNewtons: this.maxTensionNewtons,
+      loadRatio: this.tensionNewtons / this.maxTensionNewtons,
       canAttach: this.targetId !== null
         ? targetDistance <= TETHER_RANGE_METERS
         : false,
