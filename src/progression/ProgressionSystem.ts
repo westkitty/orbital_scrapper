@@ -3,19 +3,28 @@ export interface ProgressionStorage {
   setItem(key: string, value: string): void;
 }
 
-export const PROGRESSION_SAVE_VERSION = 1 as const;
+export const PROGRESSION_SAVE_VERSION = 2 as const;
+// Keep the proven storage key stable so existing Phase 9 browser saves migrate in place.
 export const PROGRESSION_SAVE_KEY = "orbital-scrapper-progression-v1";
 export const CLAMP_DAMPERS_COST_UNITS = 150;
 export const CLAMP_DAMPERS_MAX_CAPTURE_SPEED_METERS_PER_SECOND = 2;
+export const TETHER_REINFORCEMENT_COST_UNITS = 140;
+export const TETHER_REINFORCEMENT_MAX_TENSION_NEWTONS = 105;
+export const CUTTER_OPTICS_COST_UNITS = 160;
+export const CUTTER_OPTICS_RANGE_METERS = 12;
 
-export type ProgressionLoadState = "new" | "loaded" | "recovered";
+export type ProgressionLoadState = "new" | "loaded" | "migrated" | "recovered";
 
-export type ProgressionSaveV1 = {
+export type ProgressionUpgradeState = {
+  clampDampers: boolean;
+  tetherReinforcement: boolean;
+  cutterOptics: boolean;
+};
+
+export type ProgressionSaveV2 = {
   version: typeof PROGRESSION_SAVE_VERSION;
   credits: number;
-  upgrades: {
-    clampDampers: boolean;
-  };
+  upgrades: ProgressionUpgradeState;
   nextRunId: number;
   completedRuns: number;
   failedRuns: number;
@@ -23,7 +32,18 @@ export type ProgressionSaveV1 = {
   lastFailedRunId: number | null;
 };
 
-export type ProgressionDiagnostics = ProgressionSaveV1 & {
+type ProgressionSaveV1 = {
+  version: 1;
+  credits: number;
+  upgrades: { clampDampers: boolean };
+  nextRunId: number;
+  completedRuns: number;
+  failedRuns: number;
+  lastSettledRunId: number | null;
+  lastFailedRunId: number | null;
+};
+
+export type ProgressionDiagnostics = ProgressionSaveV2 & {
   loadState: ProgressionLoadState;
 };
 
@@ -33,11 +53,15 @@ export type UpgradePurchaseResult = {
   credits: number;
 };
 
-function defaultState(): ProgressionSaveV1 {
+function defaultState(): ProgressionSaveV2 {
   return {
     version: PROGRESSION_SAVE_VERSION,
     credits: 0,
-    upgrades: { clampDampers: false },
+    upgrades: {
+      clampDampers: false,
+      tetherReinforcement: false,
+      cutterOptics: false,
+    },
     nextRunId: 1,
     completedRuns: 0,
     failedRuns: 0,
@@ -54,45 +78,88 @@ function isNullablePositiveInteger(value: unknown): value is number | null {
   return value === null || (typeof value === "number" && Number.isInteger(value) && value > 0);
 }
 
-function parseState(raw: string | null): { state: ProgressionSaveV1; loadState: ProgressionLoadState } {
-  if (raw === null) return { state: defaultState(), loadState: "new" };
+function validCommonState(parsed: Partial<ProgressionSaveV2 | ProgressionSaveV1>): boolean {
+  return isNonNegativeInteger(parsed.credits)
+    && isNonNegativeInteger(parsed.completedRuns)
+    && isNonNegativeInteger(parsed.failedRuns)
+    && isNonNegativeInteger(parsed.nextRunId)
+    && parsed.nextRunId >= 1
+    && isNullablePositiveInteger(parsed.lastSettledRunId)
+    && isNullablePositiveInteger(parsed.lastFailedRunId);
+}
+
+function migrateV1(legacy: ProgressionSaveV1): ProgressionSaveV2 {
+  return {
+    version: PROGRESSION_SAVE_VERSION,
+    credits: legacy.credits,
+    upgrades: {
+      clampDampers: legacy.upgrades.clampDampers,
+      tetherReinforcement: false,
+      cutterOptics: false,
+    },
+    nextRunId: legacy.nextRunId,
+    completedRuns: legacy.completedRuns,
+    failedRuns: legacy.failedRuns,
+    lastSettledRunId: legacy.lastSettledRunId,
+    lastFailedRunId: legacy.lastFailedRunId,
+  };
+}
+
+function parseState(raw: string | null): {
+  state: ProgressionSaveV2;
+  loadState: ProgressionLoadState;
+  shouldPersist: boolean;
+} {
+  if (raw === null) return { state: defaultState(), loadState: "new", shouldPersist: false };
 
   try {
-    const parsed = JSON.parse(raw) as Partial<ProgressionSaveV1> | null;
-    if (!parsed || parsed.version !== PROGRESSION_SAVE_VERSION) {
-      return { state: defaultState(), loadState: "recovered" };
-    }
-    if (!isNonNegativeInteger(parsed.credits)
-      || !isNonNegativeInteger(parsed.completedRuns)
-      || !isNonNegativeInteger(parsed.failedRuns)
-      || !isNonNegativeInteger(parsed.nextRunId)
-      || parsed.nextRunId < 1
-      || !isNullablePositiveInteger(parsed.lastSettledRunId)
-      || !isNullablePositiveInteger(parsed.lastFailedRunId)
-      || typeof parsed.upgrades?.clampDampers !== "boolean") {
-      return { state: defaultState(), loadState: "recovered" };
+    const parsed = JSON.parse(raw) as any;
+    if (!parsed || !validCommonState(parsed)) {
+      return { state: defaultState(), loadState: "recovered", shouldPersist: false };
     }
 
-    return {
-      state: {
-        version: PROGRESSION_SAVE_VERSION,
-        credits: parsed.credits,
-        upgrades: { clampDampers: parsed.upgrades.clampDampers },
-        nextRunId: parsed.nextRunId,
-        completedRuns: parsed.completedRuns,
-        failedRuns: parsed.failedRuns,
-        lastSettledRunId: parsed.lastSettledRunId,
-        lastFailedRunId: parsed.lastFailedRunId,
-      },
-      loadState: "loaded",
-    };
+    if (parsed.version === PROGRESSION_SAVE_VERSION) {
+      if (typeof parsed.upgrades?.clampDampers !== "boolean"
+        || typeof parsed.upgrades?.tetherReinforcement !== "boolean"
+        || typeof parsed.upgrades?.cutterOptics !== "boolean") {
+        return { state: defaultState(), loadState: "recovered", shouldPersist: false };
+      }
+      return {
+        state: {
+          version: PROGRESSION_SAVE_VERSION,
+          credits: parsed.credits!,
+          upgrades: {
+            clampDampers: parsed.upgrades.clampDampers,
+            tetherReinforcement: parsed.upgrades.tetherReinforcement,
+            cutterOptics: parsed.upgrades.cutterOptics,
+          },
+          nextRunId: parsed.nextRunId!,
+          completedRuns: parsed.completedRuns!,
+          failedRuns: parsed.failedRuns!,
+          lastSettledRunId: parsed.lastSettledRunId!,
+          lastFailedRunId: parsed.lastFailedRunId!,
+        },
+        loadState: "loaded",
+        shouldPersist: false,
+      };
+    }
+
+    if (parsed.version === 1 && typeof parsed.upgrades?.clampDampers === "boolean") {
+      return {
+        state: migrateV1(parsed as ProgressionSaveV1),
+        loadState: "migrated",
+        shouldPersist: true,
+      };
+    }
+
+    return { state: defaultState(), loadState: "recovered", shouldPersist: false };
   } catch {
-    return { state: defaultState(), loadState: "recovered" };
+    return { state: defaultState(), loadState: "recovered", shouldPersist: false };
   }
 }
 
 export class ProgressionSystem {
-  private state: ProgressionSaveV1;
+  private state: ProgressionSaveV2;
   private loadState: ProgressionLoadState;
 
   constructor(
@@ -102,6 +169,7 @@ export class ProgressionSystem {
     const loaded = parseState(storage.getItem(storageKey));
     this.state = loaded.state;
     this.loadState = loaded.loadState;
+    if (loaded.shouldPersist) this.storage.setItem(this.storageKey, JSON.stringify(this.state));
   }
 
   beginRun(): number {
@@ -133,17 +201,15 @@ export class ProgressionSystem {
   }
 
   purchaseClampDampers(): UpgradePurchaseResult {
-    if (this.state.upgrades.clampDampers) {
-      return { purchased: false, reason: "already-owned", credits: this.state.credits };
-    }
-    if (this.state.credits < CLAMP_DAMPERS_COST_UNITS) {
-      return { purchased: false, reason: "insufficient-credits", credits: this.state.credits };
-    }
+    return this.purchaseUpgrade("clampDampers", CLAMP_DAMPERS_COST_UNITS);
+  }
 
-    this.state.credits -= CLAMP_DAMPERS_COST_UNITS;
-    this.state.upgrades.clampDampers = true;
-    this.persist();
-    return { purchased: true, reason: "purchased", credits: this.state.credits };
+  purchaseTetherReinforcement(): UpgradePurchaseResult {
+    return this.purchaseUpgrade("tetherReinforcement", TETHER_REINFORCEMENT_COST_UNITS);
+  }
+
+  purchaseCutterOptics(): UpgradePurchaseResult {
+    return this.purchaseUpgrade("cutterOptics", CUTTER_OPTICS_COST_UNITS);
   }
 
   getCaptureSpeedLimit(baseLimit: number): number {
@@ -152,9 +218,21 @@ export class ProgressionSystem {
       : baseLimit;
   }
 
-  hasClampDampers(): boolean {
-    return this.state.upgrades.clampDampers;
+  getTetherMaxTension(baseLimit: number): number {
+    return this.state.upgrades.tetherReinforcement
+      ? TETHER_REINFORCEMENT_MAX_TENSION_NEWTONS
+      : baseLimit;
   }
+
+  getCutterRange(baseRange: number): number {
+    return this.state.upgrades.cutterOptics
+      ? CUTTER_OPTICS_RANGE_METERS
+      : baseRange;
+  }
+
+  hasClampDampers(): boolean { return this.state.upgrades.clampDampers; }
+  hasTetherReinforcement(): boolean { return this.state.upgrades.tetherReinforcement; }
+  hasCutterOptics(): boolean { return this.state.upgrades.cutterOptics; }
 
   getDiagnostics(): ProgressionDiagnostics {
     return {
@@ -170,12 +248,26 @@ export class ProgressionSystem {
     };
   }
 
+  private purchaseUpgrade(upgrade: keyof ProgressionUpgradeState, costUnits: number): UpgradePurchaseResult {
+    if (this.state.upgrades[upgrade]) {
+      return { purchased: false, reason: "already-owned", credits: this.state.credits };
+    }
+    if (this.state.credits < costUnits) {
+      return { purchased: false, reason: "insufficient-credits", credits: this.state.credits };
+    }
+
+    this.state.credits -= costUnits;
+    this.state.upgrades[upgrade] = true;
+    this.persist();
+    return { purchased: true, reason: "purchased", credits: this.state.credits };
+  }
+
   private isCurrentRun(runId: number): boolean {
     return Number.isInteger(runId) && runId > 0 && runId === this.state.nextRunId - 1;
   }
 
   private persist(): void {
     this.storage.setItem(this.storageKey, JSON.stringify(this.state));
-    this.loadState = "loaded";
+    if (this.loadState !== "migrated") this.loadState = "loaded";
   }
 }
