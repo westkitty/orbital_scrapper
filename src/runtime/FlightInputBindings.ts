@@ -17,12 +17,28 @@ const CONTROL_CODES = new Set([
   "KeyQ", "KeyE", "Space", "KeyC", "KeyT", "KeyX",
 ]);
 
-function isInteractiveTarget(target: EventTarget | null): boolean {
+type KeyboardEventTarget = EventTarget & {
+  tagName?: unknown;
+  isContentEditable?: boolean;
+  blur?: () => void;
+};
+
+function targetTagName(target: EventTarget | null): string {
+  if (!target || typeof target !== "object") return "";
+  const tagName = (target as KeyboardEventTarget).tagName;
+  return typeof tagName === "string" ? tagName.toUpperCase() : "";
+}
+
+function isTextEntryTarget(target: EventTarget | null): boolean {
   if (!target || typeof target !== "object") return false;
-  const element = target as { tagName?: unknown; isContentEditable?: boolean };
+  const element = target as KeyboardEventTarget;
   if (element.isContentEditable) return true;
-  const tagName = typeof element.tagName === "string" ? element.tagName.toUpperCase() : "";
-  return tagName === "BUTTON" || tagName === "INPUT" || tagName === "SELECT" || tagName === "TEXTAREA";
+  const tagName = targetTagName(target);
+  return tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT";
+}
+
+function preservesNativeButtonKey(target: EventTarget | null, code: string): boolean {
+  return targetTagName(target) === "BUTTON" && code === "Space";
 }
 
 export class FlightInputBindings {
@@ -84,7 +100,13 @@ export class FlightInputBindings {
   }
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
-    if (!CONTROL_CODES.has(event.code) || isInteractiveTarget(event.target)) return;
+    if (!CONTROL_CODES.has(event.code)) return;
+    if (isTextEntryTarget(event.target) || preservesNativeButtonKey(event.target, event.code)) return;
+
+    if (targetTagName(event.target) === "BUTTON") {
+      (event.target as KeyboardEventTarget).blur?.();
+    }
+
     event.preventDefault?.();
     if (event.code === "KeyX") {
       if (!event.repeat) this.actions.reset();
@@ -96,7 +118,9 @@ export class FlightInputBindings {
   private readonly onKeyUp = (event: KeyboardEvent): void => {
     if (!CONTROL_CODES.has(event.code)) return;
     this.pressed.delete(event.code);
-    if (!isInteractiveTarget(event.target)) event.preventDefault?.();
+    if (!isTextEntryTarget(event.target) && !preservesNativeButtonKey(event.target, event.code)) {
+      event.preventDefault?.();
+    }
   };
 
   private readonly onBlur = (): void => {
