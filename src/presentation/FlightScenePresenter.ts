@@ -6,6 +6,10 @@ const ROLE_COLORS = {
   obstacle: 0x475569,
   "moving-obstacle": 0xf97316,
   target: 0xeab308,
+  "wreck-spine": 0x64748b,
+  "wreck-heavy": 0xb45309,
+  "wreck-light": 0xa3e635,
+  "wreck-branch": 0x94a3b8,
 };
 
 export class FlightScenePresenter {
@@ -18,14 +22,14 @@ export class FlightScenePresenter {
   rebuild(sandbox) {
     this.disposeRoot();
     this.root = new THREE.Group();
-    this.root.name = "phase-one-flight-root";
+    this.root.name = "gameplay-physics-root";
     this.scene.add(this.root);
 
     for (const record of sandbox.getBodyRecords()) {
       const object = record.visual.role === "craft"
         ? this.createCraft(record)
         : this.createBody(record);
-      object.name = `flight-body-${record.id}`;
+      object.name = `physics-body-${record.id}`;
       this.root.add(object);
       this.objects.set(record.id, object);
     }
@@ -37,9 +41,9 @@ export class FlightScenePresenter {
     const [x, y, z] = record.visual.size;
     const geometry = new THREE.BoxGeometry(x, y, z);
     const material = new THREE.MeshStandardMaterial({
-      color: ROLE_COLORS[record.visual.role],
+      color: ROLE_COLORS[record.visual.role] ?? 0x64748b,
       roughness: 0.82,
-      metalness: record.visual.role === "target" ? 0.25 : 0.12,
+      metalness: record.visual.role === "wreck-heavy" ? 0.35 : record.visual.role === "target" ? 0.25 : 0.12,
       wireframe: record.visual.role === "target",
     });
     const mesh = new THREE.Mesh(geometry, material);
