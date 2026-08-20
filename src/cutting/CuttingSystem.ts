@@ -150,7 +150,8 @@ export class CuttingSystem {
     const position = craft.translation();
     const rotation = craft.rotation();
     const forward = rotateLocalVector(rotation, { x: 0, y: 0, z: -1 });
-    let best: Candidate | null = null;
+    let bestEligible: Candidate | null = null;
+    let bestFallback: Candidate | null = null;
 
     for (const connection of sandbox.getCuttableConnections()) {
       const point = sandbox.getConnectionWorldPoint(connection.id);
@@ -160,9 +161,12 @@ export class CuttingSystem {
       const lowRiskBias = connection.cutClass === "low-risk" ? 0.025 : 0;
       const score = aimAlignment + lowRiskBias - distance * 0.001;
       const candidate = { connection, distance, aimAlignment, score };
-      if (!best || candidate.score > best.score) best = candidate;
+
+      if (!bestFallback || candidate.score > bestFallback.score) bestFallback = candidate;
+      const eligible = distance <= CUTTER_RANGE_METERS && aimAlignment >= CUTTER_AIM_COSINE;
+      if (eligible && (!bestEligible || candidate.score > bestEligible.score)) bestEligible = candidate;
     }
 
-    return best;
+    return bestEligible ?? bestFallback;
   }
 }
