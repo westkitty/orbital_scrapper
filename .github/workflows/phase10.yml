@@ -1,4 +1,4 @@
-name: Phase 10 Breadth Gate
+name: Phase 10 Regression Gate
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  verify-phase10:
+  verify-phase10-regression:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -28,5 +28,5 @@ jobs:
       - name: Verify resolved core versions
         run: npm ls three @dimforge/rapier3d-compat vite typescript
 
-      - name: Run Phase 10 gate
-        run: npm run verify:phase10
+      - name: Run Phase 10 regression gate
+        run: npm run verify:phase10-regression
