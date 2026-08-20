@@ -1,4 +1,4 @@
-name: Phase 11 Presentation Gate
+name: Phase 11 Regression Gate
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  verify-phase11:
+  verify-phase11-regression:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -28,5 +28,5 @@ jobs:
       - name: Verify resolved core versions
         run: npm ls three @dimforge/rapier3d-compat vite typescript
 
-      - name: Run Phase 11 gate
-        run: npm run verify:phase11
+      - name: Run Phase 11 regression gate
+        run: npm run verify:phase11-regression
