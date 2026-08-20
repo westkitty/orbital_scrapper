@@ -112,7 +112,7 @@ export class ProgressionSystem {
   }
 
   recordSettlement(runId: number, payoutUnits: number): boolean {
-    if (!Number.isInteger(runId) || runId <= 0 || !Number.isFinite(payoutUnits) || payoutUnits < 0) return false;
+    if (!this.isCurrentRun(runId) || !Number.isFinite(payoutUnits) || payoutUnits < 0) return false;
     if (this.state.lastSettledRunId === runId || this.state.lastFailedRunId === runId) return false;
 
     this.state.credits += Math.round(payoutUnits);
@@ -123,7 +123,7 @@ export class ProgressionSystem {
   }
 
   recordFailure(runId: number): boolean {
-    if (!Number.isInteger(runId) || runId <= 0) return false;
+    if (!this.isCurrentRun(runId)) return false;
     if (this.state.lastFailedRunId === runId || this.state.lastSettledRunId === runId) return false;
 
     this.state.failedRuns += 1;
@@ -168,6 +168,10 @@ export class ProgressionSystem {
       lastFailedRunId: this.state.lastFailedRunId,
       loadState: this.loadState,
     };
+  }
+
+  private isCurrentRun(runId: number): boolean {
+    return Number.isInteger(runId) && runId > 0 && runId === this.state.nextRunId - 1;
   }
 
   private persist(): void {
