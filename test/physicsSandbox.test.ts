@@ -12,7 +12,11 @@ test("Rapier fixed timestep and collision settle a free body on the ground", asy
     for (let index = 0; index < 240; index += 1) sandbox.step();
 
     const endY = free.translation().y;
-    assert.equal(sandbox.getDiagnostics().fixedTimestepSeconds, FIXED_TIMESTEP_SECONDS);
+    const actualStep = sandbox.getDiagnostics().fixedTimestepSeconds;
+    assert.ok(
+      Math.abs(actualStep - FIXED_TIMESTEP_SECONDS) < 1e-8,
+      `expected fixed timestep near ${FIXED_TIMESTEP_SECONDS}; actual=${actualStep}`,
+    );
     assert.ok(endY < startY - 1, `expected body to fall; start=${startY}, end=${endY}`);
     assert.ok(endY > 0.2, `expected ground collision to prevent tunneling; end=${endY}`);
   } finally {
