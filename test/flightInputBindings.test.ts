@@ -104,23 +104,50 @@ test("focus loss clears held movement and tool controls when keyup is lost", () 
   assert.equal(input.isTetherActive(), false);
 });
 
-test("focused interactive controls keep normal keyboard activation instead of being stolen by flight shortcuts", () => {
+test("focused buttons keep native Space activation while gameplay keys hand focus back to flight", () => {
+  const target = new FakeKeyboardTarget();
+  let resets = 0;
+  let blurCalls = 0;
+  const input = new FlightInputBindings(target, { reset: () => { resets += 1; } });
+  input.attach();
+  const button = { tagName: "BUTTON", isContentEditable: false, blur() { blurCalls += 1; } };
+
+  const spaceDown = target.dispatch("keydown", "Space", false, button);
+  assert.equal(spaceDown.prevented, false);
+  assert.equal(input.getState().brake, false);
+  assert.equal(blurCalls, 0);
+
+  const thrustDown = target.dispatch("keydown", "KeyW", false, button);
+  assert.equal(thrustDown.prevented, true);
+  assert.equal(blurCalls, 1);
+  assert.equal(input.getState().forward, 1);
+  target.dispatch("keyup", "KeyW");
+  assert.equal(input.getState().forward, 0);
+
+  const resetDown = target.dispatch("keydown", "KeyX", false, button);
+  assert.equal(resetDown.prevented, true);
+  assert.equal(resets, 1);
+});
+
+test("text-entry controls suppress gameplay shortcuts without leaving stale held keys", () => {
   const target = new FakeKeyboardTarget();
   let resets = 0;
   const input = new FlightInputBindings(target, { reset: () => { resets += 1; } });
   input.attach();
-  const button = { tagName: "BUTTON", isContentEditable: false };
+  const inputElement = { tagName: "INPUT", isContentEditable: false };
 
-  const spaceDown = target.dispatch("keydown", "Space", false, button);
-  const resetDown = target.dispatch("keydown", "KeyX", false, button);
-  assert.equal(spaceDown.prevented, false);
-  assert.equal(resetDown.prevented, false);
+  const thrust = target.dispatch("keydown", "KeyW", false, inputElement);
+  const brake = target.dispatch("keydown", "Space", false, inputElement);
+  const reset = target.dispatch("keydown", "KeyX", false, inputElement);
+  assert.equal(thrust.prevented, false);
+  assert.equal(brake.prevented, false);
+  assert.equal(reset.prevented, false);
+  assert.equal(input.getState().forward, 0);
   assert.equal(input.getState().brake, false);
   assert.equal(resets, 0);
 
   target.dispatch("keydown", "KeyW");
   assert.equal(input.getState().forward, 1);
-  const interactiveKeyUp = target.dispatch("keyup", "KeyW", false, button);
-  assert.equal(interactiveKeyUp.prevented, false);
-  assert.equal(input.getState().forward, 0, "interactive keyup did not release a previously held gameplay key");
+  target.dispatch("keyup", "KeyW", false, inputElement);
+  assert.equal(input.getState().forward, 0, "text-entry keyup did not release a previously held gameplay key");
 });
