@@ -32,7 +32,10 @@ test("settlement credit, one upgrade purchase, and next-run capability persist a
   assert.equal(reloaded.hasClampDampers(), true);
   assert.equal(reloaded.getDiagnostics().credits, 250 - CLAMP_DAMPERS_COST_UNITS);
   assert.equal(reloaded.getCaptureSpeedLimit(1.35), CLAMP_DAMPERS_MAX_CAPTURE_SPEED_METERS_PER_SECOND);
-  assert.equal(reloaded.beginRun(), firstRun + 1);
+  const secondRun = reloaded.beginRun();
+  assert.equal(secondRun, firstRun + 1);
+  assert.equal(reloaded.recordSettlement(firstRun, 250), false, "stale first run replay credited after a newer run began");
+  assert.equal(reloaded.recordFailure(firstRun), false, "stale first run replay recorded failure after a newer run began");
 });
 
 test("failed run accounting is idempotent and preserves earned progression", () => {
