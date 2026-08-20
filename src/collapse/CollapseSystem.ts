@@ -130,7 +130,6 @@ export class CollapseSystem {
     this.cue = warningCue(this.state);
     this.warningDirection = this.resolveWarningDirection(sandbox, this.highestThreat?.componentId ?? impact?.bodyId ?? null);
 
-    // Read the graph only as a synchronization guard. Collapse never writes graph state.
     const graphDiagnostics = graph.getDiagnostics();
     if (graphDiagnostics.nodeCount !== sandbox.getWreckComponents().length) {
       this.severityScore = Math.max(this.severityScore, 70);
@@ -162,7 +161,9 @@ export class CollapseSystem {
   private processContactEvents(sandbox: WreckSandbox): { bodyId: string; impulse: number } | null {
     this.lastImpactDamage = 0;
     let strongestCraftImpact: { bodyId: string; force: number; impulse: number } | null = null;
-    const componentIds = new Set(sandbox.getWreckComponents().map((component) => component.id));
+    const componentIds = new Set(
+      sandbox.getWreckComponents().filter((component) => component.body.isEnabled()).map((component) => component.id),
+    );
 
     for (const event of sandbox.getContactForceEvents()) {
       const impulse = event.totalForceMagnitude * FIXED_TIMESTEP_SECONDS;
@@ -235,7 +236,7 @@ export class CollapseSystem {
     let best: ThreatRecord | null = null;
 
     for (const component of sandbox.getWreckComponents()) {
-      if (spineSection.has(component.id)) continue;
+      if (!component.body.isEnabled() || spineSection.has(component.id)) continue;
       const position = component.body.translation();
       const velocity = component.body.linvel();
       const delta = subtract(position, craftPosition);
@@ -281,7 +282,9 @@ export class CollapseSystem {
     if (!bodyId || bodyId === "craft") return "none";
     let targetPosition: Vec3;
     try {
-      targetPosition = sandbox.getWreckComponent(bodyId).body.translation();
+      const target = sandbox.getWreckComponent(bodyId);
+      if (!target.body.isEnabled()) return "none";
+      targetPosition = target.body.translation();
     } catch {
       return "none";
     }

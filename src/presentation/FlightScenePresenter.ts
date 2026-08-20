@@ -87,6 +87,8 @@ export class FlightScenePresenter {
     for (const record of sandbox.getBodyRecords()) {
       const object = this.objects.get(record.id);
       if (!object) continue;
+      object.visible = record.body.isEnabled?.() ?? true;
+      if (!object.visible) continue;
       const position = record.body.translation();
       const rotation = record.body.rotation();
       object.position.set(position.x, position.y, position.z);

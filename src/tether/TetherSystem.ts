@@ -84,6 +84,7 @@ export class TetherSystem {
     } catch {
       return false;
     }
+    if (!component.body.isEnabled()) return false;
 
     const craftPosition = sandbox.getCraftBody().translation();
     const componentPosition = component.body.translation();
@@ -146,6 +147,10 @@ export class TetherSystem {
     }
 
     const target = sandbox.getWreckComponent(this.targetId!);
+    if (!target.body.isEnabled()) {
+      this.reset();
+      return;
+    }
     const craft = sandbox.getCraftBody();
     const craftPosition = craft.translation();
     const targetPosition = target.body.translation();
@@ -191,13 +196,18 @@ export class TetherSystem {
     let aimAlignment = this.aimAlignment;
     if (this.targetId !== null) {
       const target = sandbox.getWreckComponent(this.targetId);
-      const craft = sandbox.getCraftBody();
-      const craftPosition = craft.translation();
-      const targetPosition = target.body.translation();
-      const delta = subtract(targetPosition, craftPosition);
-      targetDistance = magnitude(delta);
-      const forward = rotateLocalVector(craft.rotation(), { x: 0, y: 0, z: -1 });
-      aimAlignment = targetDistance > 1e-9 ? dot(forward, delta) / targetDistance : 1;
+      if (target.body.isEnabled()) {
+        const craft = sandbox.getCraftBody();
+        const craftPosition = craft.translation();
+        const targetPosition = target.body.translation();
+        const delta = subtract(targetPosition, craftPosition);
+        targetDistance = magnitude(delta);
+        const forward = rotateLocalVector(craft.rotation(), { x: 0, y: 0, z: -1 });
+        aimAlignment = targetDistance > 1e-9 ? dot(forward, delta) / targetDistance : 1;
+      } else {
+        targetDistance = Number.POSITIVE_INFINITY;
+        aimAlignment = -1;
+      }
     }
     return {
       state: this.state,
@@ -220,13 +230,12 @@ export class TetherSystem {
     const forward = rotateLocalVector(craft.rotation(), { x: 0, y: 0, z: -1 });
     const severedSalvageSides = new Set<string>();
     for (const severed of sandbox.getSeveredConnections()) {
-      // Phase 3 defines component B as the removable side of each designated cut fixture.
-      // Favor that recorded side without inferring a structural graph, which remains Phase 5 work.
       severedSalvageSides.add(severed.componentBId);
     }
 
     let best: TetherCandidate | null = null;
     for (const component of sandbox.getWreckComponents()) {
+      if (!component.body.isEnabled()) continue;
       const position = component.body.translation();
       const delta = subtract(position, craftPosition);
       const distance = magnitude(delta);
