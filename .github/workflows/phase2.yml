@@ -1,4 +1,4 @@
-name: Phase 1 Regression Gate
+name: Phase 2 Wreck Gate
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  verify-phase1-regression:
+  verify-phase2:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -28,5 +28,5 @@ jobs:
       - name: Verify resolved core versions
         run: npm ls three @dimforge/rapier3d-compat vite typescript
 
-      - name: Run Phase 1 regression gate
-        run: npm run verify:phase1-regression
+      - name: Run Phase 2 gate
+        run: npm run verify:phase2
