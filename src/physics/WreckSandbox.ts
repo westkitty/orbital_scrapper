@@ -7,12 +7,18 @@ type RapierWorld = InstanceType<typeof RAPIER.World>;
 type RapierRigidBody = InstanceType<typeof RAPIER.RigidBody>;
 type RapierRigidBodyDesc = InstanceType<typeof RAPIER.RigidBodyDesc>;
 type RapierImpulseJoint = ReturnType<RapierWorld["createImpulseJoint"]>;
+type RapierEventQueue = InstanceType<typeof RAPIER.EventQueue>;
 type Vec3 = { x: number; y: number; z: number };
 
 export type WreckBodyRole = "craft" | "wreck-spine" | "wreck-heavy" | "wreck-light" | "wreck-branch";
 export type WreckComponentType = "spine" | "engine" | "panel" | "rail" | "junction";
 export type WreckMassClass = "light" | "medium" | "heavy";
 export type WreckCutClass = "low-risk" | "large-mass";
+export type WreckFailureMode = "cut" | "impact-overload";
+
+export type WreckSandboxOptions = {
+  phase7DangerFixture?: boolean;
+};
 
 export type WreckBodyVisual = {
   size: readonly [number, number, number];
@@ -48,10 +54,12 @@ export type WreckConnectionRecord = {
   cuttable: boolean;
   cutClass: WreckCutClass | null;
   releaseImpulse: number;
+  failureImpulseThreshold: number | null;
 };
 
 export type WreckSeveredConnectionRecord = Omit<WreckConnectionRecord, "joint"> & {
   severedAtSeconds: number;
+  failureMode: WreckFailureMode;
 };
 
 export type WreckSeverResult = {
@@ -61,6 +69,15 @@ export type WreckSeverResult = {
   cutClass: WreckCutClass | null;
   componentAId: string | null;
   componentBId: string | null;
+  failureMode: WreckFailureMode | null;
+};
+
+export type WreckContactForceEvent = {
+  bodyAId: string;
+  bodyBId: string;
+  totalForceMagnitude: number;
+  maxForceMagnitude: number;
+  maxForceDirection: Vec3;
 };
 
 export type WreckDiagnostics = {
@@ -82,10 +99,15 @@ export type WreckDiagnostics = {
   wreckSeveredConnectionCount: number;
   wreckLinearSpeed: number;
   maxConnectionError: number;
+  contactForceEventCount: number;
 };
 
 const CRAFT_START = Object.freeze({ x: 0, y: 0, z: 14 });
+const PHASE7_DANGER_CRAFT_START = Object.freeze({ x: -8.8765024304, y: 0, z: 2.3898275774 });
+const PHASE7_DANGER_CRAFT_ROTATION = Object.freeze({ x: 0, y: -0.6231780634, z: 0, w: 0.7820799840 });
 const IDENTITY = Object.freeze({ x: 0, y: 0, z: 0, w: 1 });
+const CONTACT_FORCE_EVENT_THRESHOLD_NEWTONS = 0.5;
+const PHASE7_ENGINE_RELEASE_IMPULSE = 48;
 
 let rapierReady: Promise<void> | null = null;
 
@@ -100,33 +122,46 @@ function magnitude(vector: Vec3): number {
 
 export class WreckSandbox {
   private world!: RapierWorld;
+  private eventQueue!: RapierEventQueue;
   private bodyRecords = new Map<string, WreckBodyRecord>();
   private components = new Map<string, WreckComponentRecord>();
   private connections = new Map<string, WreckConnectionRecord>();
   private severedConnections = new Map<string, WreckSeveredConnectionRecord>();
+  private colliderBodyIds = new Map<number, string>();
+  private contactForceEvents: WreckContactForceEvent[] = [];
   private generation = 0;
   private elapsedSeconds = 0;
   private disposed = false;
+  private readonly options: Required<WreckSandboxOptions>;
 
-  static async create(): Promise<WreckSandbox> {
+  static async create(options: WreckSandboxOptions = {}): Promise<WreckSandbox> {
     await ensureRapierReady();
-    const sandbox = new WreckSandbox();
+    const sandbox = new WreckSandbox(options);
     sandbox.rebuildWorld();
     return sandbox;
   }
 
-  private constructor() {}
+  private constructor(options: WreckSandboxOptions) {
+    this.options = {
+      phase7DangerFixture: options.phase7DangerFixture ?? false,
+    };
+  }
 
   step(controller: FlightController, input: FlightInput): void {
     this.assertAlive();
     controller.apply(this.getCraftBody(), input);
     this.elapsedSeconds += FIXED_TIMESTEP_SECONDS;
-    this.world.step();
+    this.world.step(this.eventQueue);
+    this.captureContactForceEvents();
   }
 
   reset(): void {
     this.assertAlive();
     this.rebuildWorld();
+  }
+
+  isPhase7DangerFixture(): boolean {
+    return this.options.phase7DangerFixture;
   }
 
   getCraftBody(): RapierRigidBody {
@@ -163,8 +198,21 @@ export class WreckSandbox {
     return this.connections.has(id);
   }
 
+  areBodiesConnected(bodyAId: string, bodyBId: string): boolean {
+    return this.getConnections().some((connection) => (
+      (connection.componentAId === bodyAId && connection.componentBId === bodyBId)
+      || (connection.componentAId === bodyBId && connection.componentBId === bodyAId)
+    ));
+  }
+
   getConnections(): readonly WreckConnectionRecord[] {
     return [...this.connections.values()];
+  }
+
+  getConnectionsForComponent(componentId: string): readonly WreckConnectionRecord[] {
+    return this.getConnections().filter((connection) => (
+      connection.componentAId === componentId || connection.componentBId === componentId
+    ));
   }
 
   getCuttableConnections(): readonly WreckConnectionRecord[] {
@@ -173,6 +221,10 @@ export class WreckSandbox {
 
   getSeveredConnections(): readonly WreckSeveredConnectionRecord[] {
     return [...this.severedConnections.values()];
+  }
+
+  getContactForceEvents(): readonly WreckContactForceEvent[] {
+    return this.contactForceEvents;
   }
 
   getConnectionWorldPoint(id: string): Vec3 {
@@ -186,6 +238,26 @@ export class WreckSandbox {
       y: (worldA.y + worldB.y) * 0.5,
       z: (worldA.z + worldB.z) * 0.5,
     };
+  }
+
+  getConnectionError(id: string): number {
+    const connection = this.getConnection(id);
+    const componentA = this.getWreckComponent(connection.componentAId).body;
+    const componentB = this.getWreckComponent(connection.componentBId).body;
+    const worldA = this.worldAnchor(componentA, connection.localAnchorA);
+    const worldB = this.worldAnchor(componentB, connection.localAnchorB);
+    return Math.hypot(worldA.x - worldB.x, worldA.y - worldB.y, worldA.z - worldB.z);
+  }
+
+  getConnectionRelativeSpeed(id: string): number {
+    const connection = this.getConnection(id);
+    const velocityA = this.getWreckComponent(connection.componentAId).body.linvel();
+    const velocityB = this.getWreckComponent(connection.componentBId).body.linvel();
+    return Math.hypot(
+      velocityA.x - velocityB.x,
+      velocityA.y - velocityB.y,
+      velocityA.z - velocityB.z,
+    );
   }
 
   getSeveredConnectionSeparation(id: string): number {
@@ -202,7 +274,15 @@ export class WreckSandbox {
     this.assertAlive();
     const connection = this.connections.get(id);
     if (!connection) {
-      return { connectionId: id, severed: false, reason: "missing", cutClass: null, componentAId: null, componentBId: null };
+      return {
+        connectionId: id,
+        severed: false,
+        reason: "missing",
+        cutClass: null,
+        componentAId: null,
+        componentBId: null,
+        failureMode: null,
+      };
     }
     if (!connection.cuttable) {
       return {
@@ -212,42 +292,28 @@ export class WreckSandbox {
         cutClass: connection.cutClass,
         componentAId: connection.componentAId,
         componentBId: connection.componentBId,
+        failureMode: null,
       };
     }
 
-    const componentA = this.getWreckComponent(connection.componentAId);
-    const componentB = this.getWreckComponent(connection.componentBId);
-    const positionA = componentA.body.translation();
-    const positionB = componentB.body.translation();
-    let direction = { x: positionB.x - positionA.x, y: positionB.y - positionA.y, z: positionB.z - positionA.z };
-    let length = magnitude(direction);
-    if (length < 1e-6) {
-      direction = { x: 1, y: 0, z: 0 };
-      length = 1;
+    return this.removeConnection(connection, "cut", connection.releaseImpulse);
+  }
+
+  breakConnectionFromImpact(id: string): WreckSeverResult {
+    this.assertAlive();
+    const connection = this.connections.get(id);
+    if (!connection) {
+      return {
+        connectionId: id,
+        severed: false,
+        reason: "missing",
+        cutClass: null,
+        componentAId: null,
+        componentBId: null,
+        failureMode: null,
+      };
     }
-    direction = { x: direction.x / length, y: direction.y / length, z: direction.z / length };
-
-    this.world.removeImpulseJoint(connection.joint, true);
-    this.connections.delete(id);
-    const { joint: _joint, ...severed } = connection;
-    this.severedConnections.set(id, { ...severed, severedAtSeconds: this.elapsedSeconds });
-
-    componentA.body.wakeUp();
-    componentB.body.wakeUp();
-    const impulse = connection.releaseImpulse;
-    if (impulse > 0) {
-      componentA.body.applyImpulse({ x: -direction.x * impulse, y: -direction.y * impulse, z: -direction.z * impulse }, true);
-      componentB.body.applyImpulse({ x: direction.x * impulse, y: direction.y * impulse, z: direction.z * impulse }, true);
-    }
-
-    return {
-      connectionId: id,
-      severed: true,
-      reason: "severed",
-      cutClass: connection.cutClass,
-      componentAId: connection.componentAId,
-      componentBId: connection.componentBId,
-    };
+    return this.removeConnection(connection, "impact-overload", 0);
   }
 
   getDiagnostics(): WreckDiagnostics {
@@ -280,6 +346,7 @@ export class WreckSandbox {
       wreckSeveredConnectionCount: this.severedConnections.size,
       wreckLinearSpeed: magnitude(wreckVelocity),
       maxConnectionError: this.getMaxConnectionError(),
+      contactForceEventCount: this.contactForceEvents.length,
     };
   }
 
@@ -287,41 +354,45 @@ export class WreckSandbox {
     this.assertAlive();
     let maximum = 0;
     for (const connection of this.connections.values()) {
-      const componentA = this.getWreckComponent(connection.componentAId).body;
-      const componentB = this.getWreckComponent(connection.componentBId).body;
-      const worldA = this.worldAnchor(componentA, connection.localAnchorA);
-      const worldB = this.worldAnchor(componentB, connection.localAnchorB);
-      maximum = Math.max(maximum, Math.hypot(worldA.x - worldB.x, worldA.y - worldB.y, worldA.z - worldB.z));
+      maximum = Math.max(maximum, this.getConnectionError(connection.id));
     }
     return maximum;
   }
 
   dispose(): void {
     if (this.disposed) return;
+    if (this.eventQueue) this.eventQueue.free();
     this.world.free();
     this.bodyRecords.clear();
     this.components.clear();
     this.connections.clear();
     this.severedConnections.clear();
+    this.colliderBodyIds.clear();
+    this.contactForceEvents = [];
     this.disposed = true;
   }
 
   private rebuildWorld(): void {
+    if (this.eventQueue) this.eventQueue.free();
     if (this.world) this.world.free();
 
     this.world = new RAPIER.World({ x: 0, y: 0, z: 0 });
     this.world.timestep = FIXED_TIMESTEP_SECONDS;
+    this.eventQueue = new RAPIER.EventQueue(true);
     this.bodyRecords.clear();
     this.components.clear();
     this.connections.clear();
     this.severedConnections.clear();
+    this.colliderBodyIds.clear();
+    this.contactForceEvents = [];
     this.elapsedSeconds = 0;
     this.generation += 1;
 
+    const craftStart = this.options.phase7DangerFixture ? PHASE7_DANGER_CRAFT_START : CRAFT_START;
     const craft = this.addBody(
       "craft",
       RAPIER.RigidBodyDesc.dynamic()
-        .setTranslation(CRAFT_START.x, CRAFT_START.y, CRAFT_START.z)
+        .setTranslation(craftStart.x, craftStart.y, craftStart.z)
         .setLinearDamping(0.025)
         .setAngularDamping(0.08)
         .setCanSleep(false),
@@ -329,6 +400,7 @@ export class WreckSandbox {
       { size: [1.4, 0.8, 2], role: "craft" },
       0.35,
     );
+    if (this.options.phase7DangerFixture) craft.setRotation(PHASE7_DANGER_CRAFT_ROTATION, true);
     craft.enableCcd(true);
     craft.setAdditionalSolverIterations(4);
 
@@ -362,10 +434,14 @@ export class WreckSandbox {
       { id: "right-port", localPosition: { x: 1, y: 0, z: 0.7 } },
     ]);
 
-    this.connect("spine-engine", "spine", "engine-port", "engine", "spine-port", { cuttable: true, cutClass: "large-mass", releaseImpulse: 2.2 });
+    this.connect("spine-engine", "spine", "engine-port", "engine", "spine-port", {
+      cuttable: true,
+      cutClass: "large-mass",
+      releaseImpulse: this.options.phase7DangerFixture ? PHASE7_ENGINE_RELEASE_IMPULSE : 2.2,
+    });
     this.connect("spine-panel", "spine", "panel-port", "panel", "spine-port", { cuttable: true, cutClass: "low-risk", releaseImpulse: 0.65 });
     this.connect("spine-left-rail", "spine", "left-rail-port", "left-rail", "spine-port");
-    this.connect("left-rail-rear", "left-rail", "rear-port", "rear-node", "left-port");
+    this.connect("left-rail-rear", "left-rail", "rear-port", "rear-node", "left-port", { failureImpulseThreshold: 5.5 });
     this.connect("spine-right-rail", "spine", "right-rail-port", "right-rail", "spine-port");
     this.connect("right-rail-rear", "right-rail", "rear-port", "rear-node", "right-port");
   }
@@ -405,10 +481,13 @@ export class WreckSandbox {
     restitution: number,
   ): RapierRigidBody {
     const body = this.world.createRigidBody(bodyDesc);
-    const collider = RAPIER.ColliderDesc.cuboid(...halfExtents)
+    const colliderDesc = RAPIER.ColliderDesc.cuboid(...halfExtents)
       .setRestitution(restitution)
-      .setFriction(0.7);
-    this.world.createCollider(collider, body);
+      .setFriction(0.7)
+      .setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS)
+      .setContactForceEventThreshold(CONTACT_FORCE_EVENT_THRESHOLD_NEWTONS);
+    const collider = this.world.createCollider(colliderDesc, body);
+    this.colliderBodyIds.set(collider.handle, id);
     this.bodyRecords.set(id, { id, body, visual });
     return body;
   }
@@ -419,7 +498,12 @@ export class WreckSandbox {
     attachmentAId: string,
     componentBId: string,
     attachmentBId: string,
-    options: { cuttable?: boolean; cutClass?: WreckCutClass; releaseImpulse?: number } = {},
+    options: {
+      cuttable?: boolean;
+      cutClass?: WreckCutClass;
+      releaseImpulse?: number;
+      failureImpulseThreshold?: number;
+    } = {},
   ): void {
     const componentA = this.getWreckComponent(componentAId);
     const componentB = this.getWreckComponent(componentBId);
@@ -440,7 +524,70 @@ export class WreckSandbox {
       cuttable,
       cutClass: cuttable ? (options.cutClass ?? null) : null,
       releaseImpulse: cuttable ? (options.releaseImpulse ?? 0) : 0,
+      failureImpulseThreshold: options.failureImpulseThreshold ?? null,
     });
+  }
+
+  private removeConnection(
+    connection: WreckConnectionRecord,
+    failureMode: WreckFailureMode,
+    releaseImpulse: number,
+  ): WreckSeverResult {
+    const componentA = this.getWreckComponent(connection.componentAId);
+    const componentB = this.getWreckComponent(connection.componentBId);
+    const positionA = componentA.body.translation();
+    const positionB = componentB.body.translation();
+    let direction = { x: positionB.x - positionA.x, y: positionB.y - positionA.y, z: positionB.z - positionA.z };
+    let length = magnitude(direction);
+    if (length < 1e-6) {
+      direction = { x: 1, y: 0, z: 0 };
+      length = 1;
+    }
+    direction = { x: direction.x / length, y: direction.y / length, z: direction.z / length };
+
+    this.world.removeImpulseJoint(connection.joint, true);
+    this.connections.delete(connection.id);
+    const { joint: _joint, ...severed } = connection;
+    this.severedConnections.set(connection.id, {
+      ...severed,
+      severedAtSeconds: this.elapsedSeconds,
+      failureMode,
+    });
+
+    componentA.body.wakeUp();
+    componentB.body.wakeUp();
+    if (releaseImpulse > 0) {
+      componentA.body.applyImpulse({ x: -direction.x * releaseImpulse, y: -direction.y * releaseImpulse, z: -direction.z * releaseImpulse }, true);
+      componentB.body.applyImpulse({ x: direction.x * releaseImpulse, y: direction.y * releaseImpulse, z: direction.z * releaseImpulse }, true);
+    }
+
+    return {
+      connectionId: connection.id,
+      severed: true,
+      reason: "severed",
+      cutClass: connection.cutClass,
+      componentAId: connection.componentAId,
+      componentBId: connection.componentBId,
+      failureMode,
+    };
+  }
+
+  private captureContactForceEvents(): void {
+    const events: WreckContactForceEvent[] = [];
+    this.eventQueue.drainContactForceEvents((event) => {
+      const bodyAId = this.colliderBodyIds.get(event.collider1());
+      const bodyBId = this.colliderBodyIds.get(event.collider2());
+      if (!bodyAId || !bodyBId) return;
+      const direction = event.maxForceDirection();
+      events.push({
+        bodyAId,
+        bodyBId,
+        totalForceMagnitude: event.totalForceMagnitude(),
+        maxForceMagnitude: event.maxForceMagnitude(),
+        maxForceDirection: { x: direction.x, y: direction.y, z: direction.z },
+      });
+    });
+    this.contactForceEvents = events;
   }
 
   private requireAttachment(component: WreckComponentRecord, attachmentId: string): WreckAttachmentPoint {
