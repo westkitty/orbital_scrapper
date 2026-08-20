@@ -6,6 +6,7 @@ export interface ProgressionStorage {
 export const PROGRESSION_SAVE_VERSION = 2 as const;
 // Keep the proven storage key stable so existing Phase 9 browser saves migrate in place.
 export const PROGRESSION_SAVE_KEY = "orbital-scrapper-progression-v1";
+export const PROGRESSION_BACKUP_KEY = "orbital-scrapper-progression-v1-backup";
 export const CLAMP_DAMPERS_COST_UNITS = 150;
 export const CLAMP_DAMPERS_MAX_CAPTURE_SPEED_METERS_PER_SECOND = 2;
 export const TETHER_REINFORCEMENT_COST_UNITS = 140;
@@ -13,7 +14,7 @@ export const TETHER_REINFORCEMENT_MAX_TENSION_NEWTONS = 105;
 export const CUTTER_OPTICS_COST_UNITS = 160;
 export const CUTTER_OPTICS_RANGE_METERS = 12;
 
-export type ProgressionLoadState = "new" | "loaded" | "migrated" | "recovered";
+export type ProgressionLoadState = "new" | "loaded" | "migrated" | "recovered" | "recovered-backup";
 
 export type ProgressionUpgradeState = {
   clampDampers: boolean;
@@ -107,7 +108,7 @@ function migrateV1(legacy: ProgressionSaveV1): ProgressionSaveV2 {
 
 function parseState(raw: string | null): {
   state: ProgressionSaveV2;
-  loadState: ProgressionLoadState;
+  loadState: Exclude<ProgressionLoadState, "recovered-backup">;
   shouldPersist: boolean;
 } {
   if (raw === null) return { state: defaultState(), loadState: "new", shouldPersist: false };
@@ -165,11 +166,22 @@ export class ProgressionSystem {
   constructor(
     private readonly storage: ProgressionStorage,
     private readonly storageKey = PROGRESSION_SAVE_KEY,
+    private readonly backupKey = PROGRESSION_BACKUP_KEY,
   ) {
-    const loaded = parseState(storage.getItem(storageKey));
-    this.state = loaded.state;
-    this.loadState = loaded.loadState;
-    if (loaded.shouldPersist) this.storage.setItem(this.storageKey, JSON.stringify(this.state));
+    const primary = parseState(storage.getItem(storageKey));
+    if (primary.loadState === "recovered") {
+      const backup = parseState(storage.getItem(backupKey));
+      if (backup.loadState === "loaded" || backup.loadState === "migrated") {
+        this.state = backup.state;
+        this.loadState = "recovered-backup";
+        this.writeState();
+        return;
+      }
+    }
+
+    this.state = primary.state;
+    this.loadState = primary.loadState;
+    if (primary.shouldPersist) this.writeState();
   }
 
   beginRun(): number {
@@ -266,8 +278,14 @@ export class ProgressionSystem {
     return Number.isInteger(runId) && runId > 0 && runId === this.state.nextRunId - 1;
   }
 
+  private writeState(): void {
+    const serialized = JSON.stringify(this.state);
+    this.storage.setItem(this.backupKey, serialized);
+    this.storage.setItem(this.storageKey, serialized);
+  }
+
   private persist(): void {
-    this.storage.setItem(this.storageKey, JSON.stringify(this.state));
-    if (this.loadState !== "migrated") this.loadState = "loaded";
+    this.writeState();
+    if (this.loadState !== "migrated" && this.loadState !== "recovered-backup") this.loadState = "loaded";
   }
 }
