@@ -8,10 +8,10 @@
     "sourceMap": false
   },
   "include": [
+    "src/flight/**/*.ts",
     "src/physics/**/*.ts",
-    "src/runtime/FixedStepLoop.ts",
-    "src/runtime/InputBindings.ts",
-    "src/presentation/ScenePresenter.ts",
+    "src/runtime/**/*.ts",
+    "src/presentation/**/*.ts",
     "test/**/*.ts"
   ]
 }
