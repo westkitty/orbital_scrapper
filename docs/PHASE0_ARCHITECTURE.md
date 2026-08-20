@@ -1,6 +1,6 @@
 # Orbital Scrapper — Phase 0 Architecture Decision
 
-**Decision status:** Candidate foundation, accepted only if the Phase 0 gate passes.  
+**Decision status:** Accepted and verified by the Phase 0 Runtime Gate.  
 **Scope:** Runtime, 3D physics, fixed timestep, runtime joint lifecycle, diagnostics, and reset only.
 
 ## Decision
@@ -17,7 +17,7 @@ Use a browser-native, framework-light stack:
 
 Orbital Scrapper's expensive risk is not page UI. It is a large number of rigid bodies and constraints whose state changes at runtime. The simulation therefore stays outside a component reconciliation system and advances through one explicit fixed-step owner. Three.js owns presentation; Rapier owns rigid-body/constraint truth.
 
-Rapier's JavaScript changelog identifies `0.19.3` as the current release in the inspected upstream source, and the `0.19.x` line includes performance work for scenes with many contact constraints. That is directly relevant to modular wrecks. Three.js `0.185.0` and Vite `8.2.1` are pinned from their current upstream package manifests inspected for this phase. TypeScript `7.0.2` is pinned from the published npm registry release rather than from an unreleased repository version.
+The Phase 0 gate proved that this stack can boot, simulate, alter a runtime constraint, reset deterministically, build for production, and initialize the built application in headless Chrome. That is sufficient evidence to advance to the flight-specific Phase 1 gate without claiming that later wreck, tether, scanner, collapse, or release-scale requirements are already proven.
 
 ## Ownership contract
 
@@ -30,16 +30,33 @@ Rapier's JavaScript changelog identifies `0.19.3` as the current release in the 
 
 ## Phase 0 non-goals
 
-Do not add flight controls, wreck assembly rules, cutting, tether gameplay, scanner logic, structural graphs, cargo, economy, production art, or audio in this phase.
+Phase 0 intentionally did not add flight controls, wreck assembly rules, cutting, tether gameplay, scanner logic, structural graphs, cargo, economy, production art, or audio.
 
-## Gate
+## Verification evidence
 
-The foundation may advance to Phase 1 only if automated evidence proves:
+GitHub Actions workflow: `Phase 0 Runtime Gate`, run `32326833764`.
 
-1. the project builds and serves;
-2. Rapier advances at a fixed `1/60` second timestep;
-3. a falling body collides with the ground rather than tunneling through it;
-4. a fixed joint can be removed and recreated during runtime;
-5. twenty repeated resets preserve body count, constraint count, managed scene-root count, and listener attachment count.
+The accepted gate proved:
 
-Passing this gate proves the **runtime foundation**, not the full suitability of Three.js for every later production requirement. Later phases still retain their own falsification gates.
+1. exact declared dependencies install successfully;
+2. all seven Phase 0 automated tests pass;
+3. Rapier advances at the fixed `1/60` second simulation target within numeric precision;
+4. a falling rigid body collides with the test ground;
+5. a fixed impulse joint can be removed and recreated at runtime;
+6. twenty repeated resets preserve exact rigid-body and constraint counts;
+7. twenty presentation rebuilds preserve one managed Three.js root without duplicated managed scene objects;
+8. input bindings attach once and detach cleanly;
+9. TypeScript checking and the Vite production build pass;
+10. the built application initializes in headless Chrome and reports four bodies with one active bridge constraint.
+
+## Nonblocking observations
+
+- The Phase 0 production bundle is large for such a small spike because Three.js and Rapier are bundled directly. CI reported roughly `2.76 MB` minified JavaScript / `975 KB` gzip. This is recorded for later performance/code-splitting work; it does not invalidate the runtime proof.
+- Rapier emits an initialization deprecation warning in the test environment. Current behavior passes; remove the warning during a bounded dependency/API cleanup rather than expanding Phase 0.
+- GitHub Actions currently warns that `actions/checkout@v4` and `actions/setup-node@v4` use deprecated internal Node 20 action runtimes. The runner forces Node 24 for those actions and the job passes. Treat this as CI maintenance, not a gameplay blocker.
+
+## Gate result
+
+**PASS. Phase 1 — Salvage Craft Flight is authorized.**
+
+Passing Phase 0 proves the runtime foundation only. Every later phase retains its own falsification gate.
