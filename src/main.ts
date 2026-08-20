@@ -1,8 +1,9 @@
 // @ts-nocheck
 import * as THREE from "three";
 import "./style.css";
+import { CollapseSystem } from "./collapse/CollapseSystem.js";
 import { CuttingSystem, CUTTER_AIM_COSINE, CUTTER_RANGE_METERS } from "./cutting/CuttingSystem.js";
-import { FlightController } from "./flight/FlightController.js";
+import { FlightController, NEUTRAL_FLIGHT_INPUT } from "./flight/FlightController.js";
 import { WreckSandbox } from "./physics/WreckSandbox.js";
 import { FIXED_TIMESTEP_SECONDS } from "./physics/PhysicsSandbox.js";
 import { FlightScenePresenter } from "./presentation/FlightScenePresenter.js";
@@ -16,11 +17,11 @@ const app = document.querySelector("#app");
 if (!app) throw new Error("Missing #app root");
 
 app.innerHTML = `
-  <section class="viewport" aria-label="Phase 6 scanner and structural criticality viewport"></section>
-  <aside class="panel" aria-label="Phase 6 scanner diagnostics and salvage controls">
-    <p class="eyebrow">ORBITAL SCRAPPER // PHASE 6</p>
-    <h1>Scanner & Structural Criticality</h1>
-    <p class="copy">The scanner reads current graph and physics state, then gives an estimated risk with explicit reasons. It does not drive physics and it is not an oracle.</p>
+  <section class="viewport" aria-label="Phase 7 collapse escalation and survival viewport"></section>
+  <aside class="panel" aria-label="Phase 7 collapse, scanner, and salvage diagnostics">
+    <p class="eyebrow">ORBITAL SCRAPPER // PHASE 7</p>
+    <h1>Collapse Escalation & Hull Survival</h1>
+    <p class="copy">The scanner still estimates structural risk. Live collapse state now comes from actual detached mass, closing motion, contact force, and impact-driven joint failure. Nothing runs on a scripted collapse timer.</p>
 
     <div class="control-grid" aria-label="Flight, cutter, tether, and passive scanner controls">
       <div><strong>Thrust</strong><span><kbd>W</kbd>/<kbd>S</kbd></span></div>
@@ -34,9 +35,22 @@ app.innerHTML = `
       <div><strong>Scanner</strong><span>passive aim</span></div>
     </div>
 
-    <button id="reset" type="button">Reset wreck scene <kbd>X</kbd></button>
+    <button id="reset" type="button">Reset danger fixture <kbd>X</kbd></button>
 
     <dl class="diagnostics">
+      <div><dt>Live collapse</dt><dd id="diag-collapse-state">—</dd></div>
+      <div><dt>Severity</dt><dd id="diag-collapse-severity">—</dd></div>
+      <div><dt>Hull integrity</dt><dd id="diag-hull">—</dd></div>
+      <div><dt>Highest threat</dt><dd id="diag-collapse-threat">—</dd></div>
+      <div><dt>Threat range</dt><dd id="diag-collapse-range">—</dd></div>
+      <div><dt>Closing speed</dt><dd id="diag-collapse-closing">—</dd></div>
+      <div><dt>Warning direction</dt><dd id="diag-collapse-warning">—</dd></div>
+      <div><dt>Warning cue</dt><dd id="diag-collapse-cue">—</dd></div>
+      <div><dt>Last impact</dt><dd id="diag-impact-body">—</dd></div>
+      <div><dt>Impact force</dt><dd id="diag-impact-force">—</dd></div>
+      <div><dt>Impact impulse</dt><dd id="diag-impact-impulse">—</dd></div>
+      <div><dt>Impact damage</dt><dd id="diag-impact-damage">—</dd></div>
+      <div><dt>Secondary breaks</dt><dd id="diag-secondary-breaks">—</dd></div>
       <div><dt>Scanner target</dt><dd id="diag-scan-target">—</dd></div>
       <div><dt>Relationship</dt><dd id="diag-scan-relationship">—</dd></div>
       <div><dt>Scanned object</dt><dd id="diag-scan-object">—</dd></div>
@@ -82,8 +96,8 @@ app.innerHTML = `
       <div><dt>Input</dt><dd id="diag-input">neutral</dd></div>
     </dl>
 
-    <p class="course" id="course">Aim at a live connection. The scanner explains what is attached, what may become free, and why the current cut estimate is low, moderate, or high.</p>
-    <p class="status" id="status" role="status">Initializing structural scanner…</p>
+    <p class="course" id="course">The heavy engine connection is the danger fixture. Scan it before cutting; if it comes free, react to the measured warning instead of assuming the scanner prediction is destiny.</p>
+    <p class="status" id="status" role="status">Initializing live collapse telemetry…</p>
   </aside>
 `;
 
@@ -139,13 +153,15 @@ const tetherLine = new THREE.Line(
 tetherLine.visible = false;
 scene.add(tetherLine);
 
-const sandbox = await WreckSandbox.create();
+const sandbox = await WreckSandbox.create({ phase7DangerFixture: true });
 const controller = new FlightController();
 const cutter = new CuttingSystem();
 const tether = new TetherSystem();
 const graph = new StructuralGraph();
 const scanner = new ScannerSystem();
+const collapse = new CollapseSystem();
 graph.sync(sandbox, tether.getDiagnostics(sandbox));
+collapse.step(sandbox, graph);
 const presenter = new FlightScenePresenter(scene);
 presenter.rebuild(sandbox);
 const loop = new FixedStepLoop(FIXED_TIMESTEP_SECONDS, 5);
@@ -157,7 +173,9 @@ function resetScene() {
   sandbox.reset();
   cutter.reset();
   tether.reset();
+  collapse.reset();
   graph.sync(sandbox, tether.getDiagnostics(sandbox));
+  collapse.step(sandbox, graph);
   loop.reset();
   input.clear();
   presenter.rebuild(sandbox);
@@ -239,9 +257,30 @@ function updateDiagnostics() {
   graph.sync(sandbox, tetherDiagnostics);
   const graphDiagnostics = graph.getDiagnostics();
   const scan = scanner.scan(sandbox, graph, tetherDiagnostics, cut.targetId);
-  const flightState = input?.getState?.() ?? { forward: 0, strafe: 0, vertical: 0, pitch: 0, yaw: 0, roll: 0, brake: false };
+  const collapseDiagnostics = collapse.getDiagnostics();
+  const flightState = input?.getState?.() ?? NEUTRAL_FLIGHT_INPUT;
   const cutActive = input?.isCutActive?.() ?? false;
   const tetherActive = input?.isTetherActive?.() ?? false;
+
+  document.querySelector("#diag-collapse-state").textContent = collapseDiagnostics.severityState;
+  document.querySelector("#diag-collapse-severity").textContent = `${Math.round(collapseDiagnostics.severityScore)}/100`;
+  document.querySelector("#diag-hull").textContent = `${collapseDiagnostics.hullIntegrity.toFixed(1)}/100`;
+  document.querySelector("#diag-collapse-threat").textContent = collapseDiagnostics.highestThreatComponentId ?? "none";
+  document.querySelector("#diag-collapse-range").textContent = Number.isFinite(collapseDiagnostics.highestThreatDistance)
+    ? `${collapseDiagnostics.highestThreatDistance.toFixed(2)} m`
+    : "—";
+  document.querySelector("#diag-collapse-closing").textContent = `${collapseDiagnostics.highestThreatClosingSpeed.toFixed(2)} m/s`;
+  document.querySelector("#diag-collapse-warning").textContent = collapseDiagnostics.warningDirection;
+  document.querySelector("#diag-collapse-cue").textContent = collapseDiagnostics.warningCue;
+  document.querySelector("#diag-impact-body").textContent = collapseDiagnostics.lastImpactBodyId ?? "none";
+  document.querySelector("#diag-impact-force").textContent = `${collapseDiagnostics.lastImpactForceNewtons.toFixed(1)} N`;
+  document.querySelector("#diag-impact-impulse").textContent = `${collapseDiagnostics.lastImpactImpulse.toFixed(2)} N·s`;
+  document.querySelector("#diag-impact-damage").textContent = collapseDiagnostics.lastImpactDamage > 0
+    ? `-${collapseDiagnostics.lastImpactDamage.toFixed(1)}`
+    : "0";
+  document.querySelector("#diag-secondary-breaks").textContent = collapseDiagnostics.lastSecondaryBreakId
+    ? `${collapseDiagnostics.secondaryBreakCount} (${collapseDiagnostics.lastSecondaryBreakId})`
+    : String(collapseDiagnostics.secondaryBreakCount);
 
   if (scan.state === "locked") {
     document.querySelector("#diag-scan-target").textContent = scan.connectionId;
@@ -302,31 +341,42 @@ function updateDiagnostics() {
   document.querySelector("#diag-joint-error").textContent = `${(diagnostics.maxConnectionError * 1000).toFixed(2)} mm`;
   document.querySelector("#diag-bodies").textContent = String(diagnostics.activeBodies);
   document.querySelector("#diag-step").textContent = `${(diagnostics.fixedTimestepSeconds * 1000).toFixed(2)} ms`;
-  document.querySelector("#diag-input").textContent = describeInput(flightState, cutActive, tetherActive);
+  document.querySelector("#diag-input").textContent = collapseDiagnostics.destroyed
+    ? "controls disabled — hull lost"
+    : describeInput(flightState, cutActive, tetherActive);
 
   if (graphDiagnostics.nodeCount !== diagnostics.wreckComponentCount || graphDiagnostics.edgeCount !== diagnostics.wreckConnectionCount) {
-    course.textContent = "Graph/physics mismatch detected. Scanner output is not trustworthy while topology diverges.";
-    status.textContent = "Structural synchronization failure; prediction withheld.";
+    course.textContent = "Graph/physics mismatch detected. Scanner and collapse interpretation are withheld until structure is synchronized.";
+    status.textContent = "Structural synchronization failure.";
+  } else if (collapseDiagnostics.destroyed) {
+    course.textContent = `HULL LOST after a measured ${collapseDiagnostics.lastImpactImpulse.toFixed(2)} N·s impact from ${collapseDiagnostics.lastImpactBodyId ?? "debris"}. Press X to reset.`;
+    status.textContent = "Failure state: craft destroyed. Physics continues, player controls are disabled.";
+  } else if (collapseDiagnostics.severityState === "critical" || collapseDiagnostics.severityState === "danger") {
+    course.textContent = `${collapseDiagnostics.severityState.toUpperCase()}: ${collapseDiagnostics.highestThreatComponentId ?? "debris"} ${collapseDiagnostics.warningDirection}; closing ${collapseDiagnostics.highestThreatClosingSpeed.toFixed(2)} m/s.`;
+    status.textContent = `Live warning ${collapseDiagnostics.warningCue}; severity ${Math.round(collapseDiagnostics.severityScore)}/100 from current simulation state.`;
+  } else if (collapseDiagnostics.severityState === "elevated") {
+    course.textContent = `Caution: ${collapseDiagnostics.highestThreatComponentId ?? "detached mass"} is producing an elevated live threat. Move, brake, or tether to change the geometry.`;
+    status.textContent = `Live warning ${collapseDiagnostics.warningCue}; severity ${Math.round(collapseDiagnostics.severityScore)}/100.`;
   } else if (tetherDiagnostics.state === "snapped") {
     course.textContent = `Tether overload exceeded ${TETHER_MAX_TENSION_NEWTONS.toFixed(0)} N. Scanner support state clears with the failed tether.`;
     status.textContent = scan.state === "locked" ? `Current prediction: ${scan.riskLevel} estimate without active support.` : "Scanner has no valid target.";
   } else if (tetherDiagnostics.state === "attached" && scan.state === "locked") {
-    course.textContent = `Temporary support on ${tetherDiagnostics.targetId} is included in the ${scan.connectionId} estimate. Release T to compare the unsupported prediction.`;
+    course.textContent = `Temporary support on ${tetherDiagnostics.targetId} is included in the ${scan.connectionId} estimate and physically changes motion.`;
     status.textContent = `Supported prediction: ${scan.riskLevel} (${Math.round(scan.riskScore)}/100), not a guarantee.`;
   } else if (cut.state === "complete") {
     course.textContent = scan.state === "locked"
-      ? `Cut complete: ${cut.lastCompletedConnectionId}. Scanner dropped that stale edge and reacquired ${scan.connectionId}.`
-      : `Cut complete: ${cut.lastCompletedConnectionId}. The severed connection is no longer a scanner target.`;
-    status.textContent = "Scanner refreshed from current live topology after physical joint removal.";
+      ? `Cut complete: ${cut.lastCompletedConnectionId}. Scanner refreshed to ${scan.connectionId}; live collapse telemetry now follows actual detached motion.`
+      : `Cut complete: ${cut.lastCompletedConnectionId}. The severed connection is gone; live collapse telemetry follows current physics.`;
+    status.textContent = "Prediction and live danger are separate: scanner predicts; collapse state measures what actually happens.";
   } else if (scan.state === "locked") {
     course.textContent = `${scan.relationship}: ${scan.riskLevel} estimate. Likely free: ${scan.likelyFreeComponentIds.join(", ") || "none because an alternate path remains"}.`;
-    status.textContent = `Prediction uses live topology, mass, relative motion, and temporary support. Scanner range ${SCANNER_RANGE_METERS.toFixed(0)} m.`;
+    status.textContent = `Prediction uses live topology/mass/support. Live collapse is ${collapseDiagnostics.severityState} because no dangerous motion exists yet.`;
   } else if (diagnostics.distanceToWreck > SCANNER_RANGE_METERS) {
-    course.textContent = `Approach under control. Scanner range is ${SCANNER_RANGE_METERS.toFixed(0)} m; cutter range is ${CUTTER_RANGE_METERS.toFixed(0)} m; tether range is ${TETHER_RANGE_METERS.toFixed(0)} m.`;
+    course.textContent = `Approach under control. Scanner range ${SCANNER_RANGE_METERS.toFixed(0)} m; cutter ${CUTTER_RANGE_METERS.toFixed(0)} m; tether ${TETHER_RANGE_METERS.toFixed(0)} m.`;
     status.textContent = "No scanner estimate outside current proof range.";
   } else if (!cut.canCut) {
-    course.textContent = `Aim toward a live connection. Required cutter alignment remains ${CUTTER_AIM_COSINE.toFixed(2)} when cutting.`;
-    status.textContent = "Scanner searches all live graph edges; cutter eligibility remains separate.";
+    course.textContent = `Aim toward a live connection. Required cutter alignment remains ${CUTTER_AIM_COSINE.toFixed(2)}.`;
+    status.textContent = "Scanner searches live graph edges; collapse telemetry remains quiet until measurable danger exists.";
   } else {
     course.textContent = "Scanner is searching current live connections.";
     status.textContent = "No target lock; no prediction is being asserted.";
@@ -342,9 +392,17 @@ function frame(now) {
   const delta = (now - lastTime) / 1000;
   lastTime = now;
   loop.advance(delta, () => {
-    cutter.step(sandbox, input.isCutActive());
-    tether.step(sandbox, input.isTetherActive());
-    sandbox.step(controller, input.getState());
+    const destroyed = collapse.getDiagnostics().destroyed;
+    if (!destroyed) {
+      cutter.step(sandbox, input.isCutActive());
+      tether.step(sandbox, input.isTetherActive());
+      sandbox.step(controller, input.getState());
+    } else {
+      tether.step(sandbox, false);
+      sandbox.step(controller, NEUTRAL_FLIGHT_INPUT);
+    }
+    graph.sync(sandbox, tether.getDiagnostics(sandbox));
+    collapse.step(sandbox, graph);
     graph.sync(sandbox, tether.getDiagnostics(sandbox));
   });
   presenter.sync(sandbox);
@@ -356,7 +414,7 @@ function frame(now) {
 
 presenter.updateCamera(sandbox, camera);
 updateDiagnostics();
-document.body.dataset.phase6 = "ready";
+document.body.dataset.phase7 = "ready";
 requestAnimationFrame(frame);
 
 window.addEventListener("beforeunload", () => {
