@@ -166,9 +166,9 @@ test("production VFX communicate live scan cutter tether load and impact without
     assert.deepEqual(sandbox.getConnections().map((connection) => connection.id), baselineEdges);
 
     assert.equal(sandbox.severConnection("spine-panel").severed, true);
-    assert.equal(tether.attachToComponent(sandbox, "panel"), true);
-    const attached = tether.getDiagnostics(sandbox);
-    fx.update(sandbox, null, { targetId: null }, { ...attached, loadRatio: 0.15 }, { lastImpactBodyId: null, lastImpactImpulse: 0 }, 1.1);
+    assert.equal(sandbox.getWreckComponent("panel").body.isEnabled(), true);
+    const attached = { state: "attached", targetId: "panel", loadRatio: 0.15 };
+    fx.update(sandbox, null, { targetId: null }, attached, { lastImpactBodyId: null, lastImpactImpulse: 0 }, 1.1);
     const lightLoad = fx.getDiagnostics();
     assert.equal(lightLoad.tetherVisible, true);
     fx.update(sandbox, null, { targetId: null }, { ...attached, loadRatio: 0.95 }, { lastImpactBodyId: "panel", lastImpactImpulse: 8 }, 1.2);
