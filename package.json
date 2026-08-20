@@ -16,6 +16,7 @@
     "test:phase3": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/test/cuttingSystem.test.js .test-dist/test/fixedStepLoop.test.js .test-dist/test/flightInputBindings.test.js .test-dist/test/flightSandbox.test.js .test-dist/test/flightScenePresenter.test.js .test-dist/test/inputBindings.test.js .test-dist/test/physicsSandbox.test.js .test-dist/test/scenePresenter.test.js .test-dist/test/wreckSandbox.test.js .test-dist/test/wreckScenePresenter.test.js",
     "test:phase4": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/test/cuttingSystem.test.js .test-dist/test/fixedStepLoop.test.js .test-dist/test/flightInputBindings.test.js .test-dist/test/flightSandbox.test.js .test-dist/test/flightScenePresenter.test.js .test-dist/test/inputBindings.test.js .test-dist/test/physicsSandbox.test.js .test-dist/test/scenePresenter.test.js .test-dist/test/tetherSystem.test.js .test-dist/test/wreckSandbox.test.js .test-dist/test/wreckScenePresenter.test.js",
     "test:phase5": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/test/cuttingSystem.test.js .test-dist/test/fixedStepLoop.test.js .test-dist/test/flightInputBindings.test.js .test-dist/test/flightSandbox.test.js .test-dist/test/flightScenePresenter.test.js .test-dist/test/inputBindings.test.js .test-dist/test/physicsSandbox.test.js .test-dist/test/scenePresenter.test.js .test-dist/test/structuralGraph.test.js .test-dist/test/tetherSystem.test.js .test-dist/test/wreckSandbox.test.js .test-dist/test/wreckScenePresenter.test.js",
+    "test:phase6": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/test/cuttingSystem.test.js .test-dist/test/fixedStepLoop.test.js .test-dist/test/flightInputBindings.test.js .test-dist/test/flightSandbox.test.js .test-dist/test/flightScenePresenter.test.js .test-dist/test/inputBindings.test.js .test-dist/test/physicsSandbox.test.js .test-dist/test/scannerSystem.test.js .test-dist/test/scenePresenter.test.js .test-dist/test/structuralGraph.test.js .test-dist/test/tetherSystem.test.js .test-dist/test/wreckSandbox.test.js .test-dist/test/wreckScenePresenter.test.js",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4173",
     "smoke:phase1": "node scripts/phase1-smoke.mjs",
@@ -36,7 +37,8 @@
     "verify:phase4-regression": "npm run test:phase4 && npm run build",
     "verify:phase5": "npm run verify:phase5-regression",
     "verify:phase5-regression": "npm run test:phase5 && npm run build",
-    "verify:phase6": "npm run test && npm run build && npm run smoke:phase6"
+    "verify:phase6": "npm run verify:phase6-regression",
+    "verify:phase6-regression": "npm run test:phase6 && npm run build"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.19.3",
