@@ -94,8 +94,13 @@ test("Tether Reinforcement changes the same overload outcome while preserving bo
   const storage = new MemoryStorage(); const progression = new ProgressionSystem(storage); const run = progression.beginRun(); progression.recordSettlement(run, 500); assert.equal(progression.purchaseTetherReinforcement().purchased, true); const persisted = new ProgressionSystem(storage);
   const baseSandbox = await WreckSandbox.create(); const upgradedSandbox = await WreckSandbox.create(); const baseTether = new TetherSystem(); const upgradedTether = new TetherSystem({ maxTensionNewtons: persisted.getTetherMaxTension(TETHER_MAX_TENSION_NEWTONS) });
   try {
-    for (const sandbox of [baseSandbox, upgradedSandbox]) { const craft = sandbox.getCraftBody(); craft.setTranslation({ x: 0, y: 0, z: 10 }, true); craft.setLinvel({ x: 0, y: 0, z: 0 }, true); assert.equal(sandbox.severConnection("spine-panel").severed, true); }
-    assert.equal(baseTether.attachToComponent(baseSandbox, "panel"), true); assert.equal(upgradedTether.attachToComponent(upgradedSandbox, "panel"), true); for (let index = 0; index < 175; index += 1) { baseTether.step(baseSandbox, true); upgradedTether.step(upgradedSandbox, true); }
+    for (const sandbox of [baseSandbox, upgradedSandbox]) {
+      const craft = sandbox.getCraftBody(); craft.setTranslation({ x: 0, y: 0, z: 10 }, true); craft.setLinvel({ x: 0, y: 0, z: 0 }, true); assert.equal(sandbox.severConnection("spine-panel").severed, true);
+      const panel = sandbox.getWreckComponent("panel").body; const craftPosition = craft.translation(); const panelPosition = panel.translation(); const dx = panelPosition.x - craftPosition.x; const dy = panelPosition.y - craftPosition.y; const dz = panelPosition.z - craftPosition.z; const length = Math.hypot(dx, dy, dz); const speed = 22;
+      panel.setLinvel({ x: dx / length * speed, y: dy / length * speed, z: dz / length * speed }, true);
+    }
+    assert.equal(baseTether.attachToComponent(baseSandbox, "panel"), true); assert.equal(upgradedTether.attachToComponent(upgradedSandbox, "panel"), true);
+    baseTether.step(baseSandbox, true); upgradedTether.step(upgradedSandbox, true);
     assert.equal(baseTether.getDiagnostics(baseSandbox).state, "snapped"); const upgraded = upgradedTether.getDiagnostics(upgradedSandbox); assert.equal(upgraded.state, "attached"); assert.equal(upgraded.maxTensionNewtons, TETHER_REINFORCEMENT_MAX_TENSION_NEWTONS); assert.ok(upgraded.tensionNewtons > TETHER_MAX_TENSION_NEWTONS); assert.ok(upgraded.tensionNewtons < TETHER_REINFORCEMENT_MAX_TENSION_NEWTONS);
   } finally { baseSandbox.dispose(); upgradedSandbox.dispose(); }
 });
