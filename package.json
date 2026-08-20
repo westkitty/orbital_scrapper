@@ -12,15 +12,19 @@
     "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/test/*.test.js",
     "test:phase0": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/test/fixedStepLoop.test.js .test-dist/test/inputBindings.test.js .test-dist/test/physicsSandbox.test.js .test-dist/test/scenePresenter.test.js",
     "test:phase1": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/test/fixedStepLoop.test.js .test-dist/test/flightInputBindings.test.js .test-dist/test/flightSandbox.test.js .test-dist/test/flightScenePresenter.test.js .test-dist/test/inputBindings.test.js .test-dist/test/physicsSandbox.test.js .test-dist/test/scenePresenter.test.js",
+    "test:phase2": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/test/fixedStepLoop.test.js .test-dist/test/flightInputBindings.test.js .test-dist/test/flightSandbox.test.js .test-dist/test/flightScenePresenter.test.js .test-dist/test/inputBindings.test.js .test-dist/test/physicsSandbox.test.js .test-dist/test/scenePresenter.test.js .test-dist/test/wreckSandbox.test.js .test-dist/test/wreckScenePresenter.test.js",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4173",
     "smoke:phase1": "node scripts/phase1-smoke.mjs",
     "smoke:phase2": "node scripts/phase2-smoke.mjs",
+    "smoke:phase3": "node scripts/phase3-smoke.mjs",
     "verify:phase0": "npm run verify:phase0-regression",
     "verify:phase0-regression": "npm run test:phase0 && npm run build",
     "verify:phase1": "npm run verify:phase1-regression",
     "verify:phase1-regression": "npm run test:phase1 && npm run build",
-    "verify:phase2": "npm run test && npm run build && npm run smoke:phase2"
+    "verify:phase2": "npm run verify:phase2-regression",
+    "verify:phase2-regression": "npm run test:phase2 && npm run build",
+    "verify:phase3": "npm run test && npm run build && npm run smoke:phase3"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.19.3",
