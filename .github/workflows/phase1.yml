@@ -1,0 +1,32 @@
+name: Phase 1 Flight Gate
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-phase1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+
+      - name: Install exact declared dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Verify resolved core versions
+        run: npm ls three @dimforge/rapier3d-compat vite typescript
+
+      - name: Run Phase 1 gate
+        run: npm run verify:phase1
