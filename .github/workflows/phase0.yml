@@ -5,6 +5,9 @@ on:
     branches:
       - main
       - phase0-runtime-foundation
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:

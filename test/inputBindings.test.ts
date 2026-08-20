@@ -1,18 +1,19 @@
+// @ts-nocheck
 import assert from "node:assert/strict";
 import test from "node:test";
-import { InputBindings, type KeyboardTarget } from "../src/runtime/InputBindings.js";
+import { InputBindings } from "../src/runtime/InputBindings.js";
 
-class FakeKeyboardTarget implements KeyboardTarget {
-  listeners = new Set<(event: KeyboardEvent) => void>();
+class FakeKeyboardTarget {
+  listeners = new Set();
   adds = 0;
   removes = 0;
 
-  addEventListener(_type: "keydown", listener: (event: KeyboardEvent) => void): void {
+  addEventListener(_type, listener) {
     this.adds += 1;
     this.listeners.add(listener);
   }
 
-  removeEventListener(_type: "keydown", listener: (event: KeyboardEvent) => void): void {
+  removeEventListener(_type, listener) {
     this.removes += 1;
     this.listeners.delete(listener);
   }

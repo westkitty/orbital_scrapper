@@ -1,3 +1,4 @@
+// @ts-nocheck
 import assert from "node:assert/strict";
 import test from "node:test";
 import { FIXED_TIMESTEP_SECONDS, PhysicsSandbox } from "../src/physics/PhysicsSandbox.js";

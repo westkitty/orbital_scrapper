@@ -2,6 +2,11 @@ import RAPIER from "@dimforge/rapier3d-compat";
 
 export const FIXED_TIMESTEP_SECONDS = 1 / 60;
 
+type RapierWorld = InstanceType<typeof RAPIER.World>;
+type RapierRigidBody = InstanceType<typeof RAPIER.RigidBody>;
+type RapierRigidBodyDesc = InstanceType<typeof RAPIER.RigidBodyDesc>;
+type RapierImpulseJoint = ReturnType<RapierWorld["createImpulseJoint"]>;
+
 export type BodyVisual = {
   size: readonly [number, number, number];
   role: "ground" | "linked" | "free";
@@ -9,7 +14,7 @@ export type BodyVisual = {
 
 export type BodyRecord = {
   id: string;
-  body: RAPIER.RigidBody;
+  body: RapierRigidBody;
   visual: BodyVisual;
 };
 
@@ -31,9 +36,9 @@ async function ensureRapierReady(): Promise<void> {
 }
 
 export class PhysicsSandbox {
-  private world!: RAPIER.World;
+  private world!: RapierWorld;
   private records = new Map<string, BodyRecord>();
-  private bridgeJoint: RAPIER.ImpulseJoint | null = null;
+  private bridgeJoint: RapierImpulseJoint | null = null;
   private generation = 0;
   private disposed = false;
 
@@ -157,7 +162,7 @@ export class PhysicsSandbox {
 
   private addCuboid(
     id: string,
-    bodyDesc: RAPIER.RigidBodyDesc,
+    bodyDesc: RapierRigidBodyDesc,
     halfExtents: readonly [number, number, number],
     visual: BodyVisual,
   ): void {
@@ -167,7 +172,7 @@ export class PhysicsSandbox {
     this.records.set(id, { id, body, visual });
   }
 
-  private requireBody(id: string): RAPIER.RigidBody {
+  private requireBody(id: string): RapierRigidBody {
     return this.getBodyRecord(id).body;
   }
 
