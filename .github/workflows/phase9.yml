@@ -1,4 +1,4 @@
-name: Phase 9 Vertical Slice Gate
+name: Phase 9 Regression Gate
 
 on:
   pull_request:
@@ -12,7 +12,7 @@ permissions:
 jobs:
   verify-phase9:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,5 +28,5 @@ jobs:
       - name: Verify resolved core versions
         run: npm ls three @dimforge/rapier3d-compat vite typescript
 
-      - name: Run Phase 9 gate
-        run: npm run verify:phase9
+      - name: Run Phase 9 regression gate
+        run: npm run verify:phase9-regression
