@@ -1,4 +1,4 @@
-name: Phase 8 Cargo Gate
+name: Phase 8 Regression Gate
 
 on:
   pull_request:
@@ -28,5 +28,5 @@ jobs:
       - name: Verify resolved core versions
         run: npm ls three @dimforge/rapier3d-compat vite typescript
 
-      - name: Run Phase 8 gate
-        run: npm run verify:phase8
+      - name: Run Phase 8 regression gate
+        run: npm run verify:phase8-regression
