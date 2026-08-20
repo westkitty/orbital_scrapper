@@ -1,5 +1,7 @@
 node_modules/
 dist/
 .test-dist/
+release/
+performance-evidence/
 *.log
 .DS_Store
