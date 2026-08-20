@@ -1,4 +1,4 @@
-name: Phase 4 Tether Gate
+name: Phase 4 Regression Gate
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  verify-phase4:
+  verify-phase4-regression:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -28,5 +28,5 @@ jobs:
       - name: Verify resolved core versions
         run: npm ls three @dimforge/rapier3d-compat vite typescript
 
-      - name: Run Phase 4 gate
-        run: npm run verify:phase4
+      - name: Run Phase 4 regression gate
+        run: npm run verify:phase4-regression
