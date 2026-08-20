@@ -8,7 +8,6 @@ const BACKUP_KEY = "orbital-scrapper-progression-v1-backup";
 const PROFILE = "/tmp/orbital-scrapper-phase12-chrome";
 const EVIDENCE_PATH = "performance-evidence/phase12-ci-capture.json";
 const UPGRADE_COST = 150;
-const BASE_CAPTURE_LIMIT = 1.35;
 const UPGRADED_CAPTURE_LIMIT = 2.0;
 const BUDGET = Object.freeze({
   minimumFrames: 300,
@@ -74,11 +73,16 @@ async function evaluate(wsUrl, expression) {
   if (result?.exceptionDetails) throw new Error(result.exceptionDetails.text ?? "Browser evaluation failed");
   return result?.result?.value;
 }
+async function evaluateWithCommandLineApi(wsUrl, expression) {
+  const result = await callCdp(wsUrl, "Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true, includeCommandLineAPI: true });
+  if (result?.exceptionDetails) throw new Error(result.exceptionDetails.text ?? "Browser command-line evaluation failed");
+  return result?.result?.value;
+}
 async function waitForTarget() {
   let lastTargets = [];
   for (let attempt = 0; attempt < 300; attempt += 1) {
     lastTargets = await fetchTargets();
-    const page = lastTargets.find((target) => target.type === "page" && target.webSocketDebuggerUrl);
+    const page = lastTargets.find((target) => target.type === "page" && target.webSocketDebuggerUrl && target.url?.startsWith(APP_URL));
     if (page) return page;
     if (browser?.exitCode !== null) break;
     await sleep(100);
@@ -86,32 +90,9 @@ async function waitForTarget() {
   throw new Error(`Phase 12 Chrome target never appeared. browserExit=${browser?.exitCode ?? "running"} targets=${JSON.stringify(lastTargets)}\n${browserOutput}`);
 }
 
-const INSTRUMENTATION = `(() => {
-  const state = { frameDeltas: [], callbackDurations: [], lastFrame: null, activeListeners: 0 };
-  const registry = new WeakMap();
-  const originalAdd = EventTarget.prototype.addEventListener;
-  const originalRemove = EventTarget.prototype.removeEventListener;
-  const bucketFor = (target, type) => {
-    let byType = registry.get(target);
-    if (!byType) { byType = new Map(); registry.set(target, byType); }
-    let listeners = byType.get(type);
-    if (!listeners) { listeners = new Set(); byType.set(type, listeners); }
-    return listeners;
-  };
-  EventTarget.prototype.addEventListener = function(type, listener, options) {
-    if (listener) {
-      const bucket = bucketFor(this, type);
-      if (!bucket.has(listener)) { bucket.add(listener); state.activeListeners += 1; }
-    }
-    return originalAdd.call(this, type, listener, options);
-  };
-  EventTarget.prototype.removeEventListener = function(type, listener, options) {
-    if (listener) {
-      const bucket = bucketFor(this, type);
-      if (bucket.delete(listener)) state.activeListeners -= 1;
-    }
-    return originalRemove.call(this, type, listener, options);
-  };
+const FRAME_INSTRUMENTATION = `(() => {
+  if (window.__phase12Probe) return true;
+  const state = { frameDeltas: [], callbackDurations: [], lastFrame: null };
   const originalRaf = window.requestAnimationFrame.bind(window);
   window.requestAnimationFrame = (callback) => originalRaf((timestamp) => {
     if (state.lastFrame !== null) {
@@ -127,21 +108,41 @@ const INSTRUMENTATION = `(() => {
     }
   });
   window.__phase12Probe = {
-    snapshot: () => ({
-      frameDeltas: state.frameDeltas.slice(),
-      callbackDurations: state.callbackDurations.slice(),
-      activeListeners: state.activeListeners,
-    }),
+    snapshot: () => ({ frameDeltas: state.frameDeltas.slice(), callbackDurations: state.callbackDurations.slice() }),
     resetSamples: () => { state.frameDeltas.length = 0; state.callbackDurations.length = 0; state.lastFrame = null; },
   };
+  return true;
 })();`;
+
+async function listenerSnapshot(wsUrl) {
+  return await evaluateWithCommandLineApi(wsUrl, `(() => {
+    const targets = [
+      ['window', window],
+      ['document', document],
+      ['canvas', document.querySelector('.viewport canvas')],
+      ['reset', document.querySelector('#reset-button')],
+      ['audio', document.querySelector('#audio-toggle')],
+      ['buy', document.querySelector('#buy-clamp-dampers')],
+      ['launch', document.querySelector('#launch-next-run')],
+    ];
+    const byTarget = {};
+    let total = 0;
+    for (const [name, target] of targets) {
+      if (!target) { byTarget[name] = 0; continue; }
+      const listeners = getEventListeners(target);
+      const count = Object.values(listeners).reduce((sum, list) => sum + list.length, 0);
+      byTarget[name] = count;
+      total += count;
+    }
+    return { total, byTarget };
+  })()`);
+}
 
 async function currentState(wsUrl) {
   return await evaluate(wsUrl, `(() => {
     const text = (selector) => document.querySelector(selector)?.textContent ?? '';
     const number = (selector) => Number.parseFloat(text(selector));
     const integer = (selector) => Number.parseInt(text(selector), 10);
-    const probe = window.__phase12Probe?.snapshot?.() ?? { activeListeners: -1 };
     return {
       ready: document.body.dataset.phase9 === 'ready' && document.body.dataset.phase11 === 'ready' && document.body.dataset.presentation === 'production',
       reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -153,7 +154,6 @@ async function currentState(wsUrl) {
       hull: number('#diag-hull'), graph: text('#diag-graph'), bodies: integer('#diag-bodies'), presentationMeshes: Number.parseInt(document.body.dataset.presentationMeshes ?? '0', 10),
       audioState: document.body.dataset.audioState, dockHidden: document.querySelector('#dock-panel')?.hidden ?? true,
       buyDisabled: document.querySelector('#buy-clamp-dampers')?.disabled ?? true, launchDisabled: document.querySelector('#launch-next-run')?.disabled ?? true,
-      activeListeners: probe.activeListeners,
     };
   })()`);
 }
@@ -223,7 +223,6 @@ function analyzeProbe(probe) {
     callbackP95Ms: percentile(callbacks, 0.95),
     callbackP99Ms: percentile(callbacks, 0.99),
     callbackMaxMs: Math.max(...callbacks),
-    activeListeners: probe.activeListeners,
   };
 }
 function metricsMap(result) {
@@ -245,29 +244,34 @@ try {
   const browserPath = findBrowser();
   browser = spawn(browserPath, [
     "--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--disable-background-timer-throttling", "--disable-renderer-backgrounding",
-    "--enable-unsafe-swiftshader", "--use-gl=swiftshader", "--window-size=1280,900", `--user-data-dir=${PROFILE}`,
-    "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=9224", "about:blank",
+    "--enable-unsafe-swiftshader", "--use-gl=swiftshader", "--force-prefers-reduced-motion", "--window-size=1280,900", `--user-data-dir=${PROFILE}`,
+    "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=9224", APP_URL,
   ], { stdio:["ignore","pipe","pipe"] });
   browser.stdout.on("data", (chunk) => { browserOutput += chunk.toString(); }); browser.stderr.on("data", (chunk) => { browserOutput += chunk.toString(); });
   const page = await waitForTarget(); const wsUrl = page.webSocketDebuggerUrl;
 
   await callCdp(wsUrl, "Page.enable");
   await callCdp(wsUrl, "Performance.enable");
-  const bootstrapSource = `try { localStorage.removeItem(${JSON.stringify(SAVE_KEY)}); localStorage.removeItem(${JSON.stringify(BACKUP_KEY)}); } catch {}\n${INSTRUMENTATION}`;
-  const bootstrap = await callCdp(wsUrl, "Page.addScriptToEvaluateOnNewDocument", { source: bootstrapSource });
-  await callCdp(wsUrl, "Emulation.setEmulatedMedia", { media: "screen", features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
-  await callCdp(wsUrl, "Page.navigate", { url: APP_URL });
-  const clean = await waitForState(wsUrl, (s) => s.ready && s.reducedMotion && s.runState === "field" && s.runId === 1 && s.completedRuns === 0 && s.failedRuns === 0 && s.bodies === 7 && s.graph.includes("6 nodes / 6 edges / 0 supports") && s.presentationMeshes > 0 && s.activeListeners > 0, 300, "Clean reduced-motion Phase 12 start");
-  if (bootstrap?.identifier) await callCdp(wsUrl, "Page.removeScriptToEvaluateOnNewDocument", { identifier: bootstrap.identifier });
-  const baselineListeners = clean.activeListeners;
-  const baselineMeshes = clean.presentationMeshes;
+  await callCdp(wsUrl, "HeapProfiler.enable");
+  await waitForState(wsUrl, (s) => s.ready, 300, "Initial Phase 12 boot");
+  await evaluate(wsUrl, `localStorage.removeItem(${JSON.stringify(SAVE_KEY)}); localStorage.removeItem(${JSON.stringify(BACKUP_KEY)}); location.reload(); true`);
+  const cleanBase = await waitForState(wsUrl, (s) => s.ready && s.runState === "field" && s.runId === 1 && s.completedRuns === 0 && s.failedRuns === 0 && s.bodies === 7 && s.graph.includes("6 nodes / 6 edges / 0 supports") && s.presentationMeshes > 0, 300, "Clean Phase 12 start");
+  await callCdp(wsUrl, "Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+  const clean = await waitForState(wsUrl, (s) => s.ready && s.reducedMotion, 80, "Reduced-motion live target configuration");
+  await evaluate(wsUrl, FRAME_INSTRUMENTATION);
+  await sleep(100);
+  const baselineListeners = await listenerSnapshot(wsUrl);
+  const baselineMeshes = cleanBase.presentationMeshes;
+  if (!(baselineListeners.total > 0)) throw new Error(`Chrome listener snapshot did not observe the application lifecycle: ${JSON.stringify(baselineListeners)}`);
 
   await clickElement(wsUrl, "#audio-toggle");
-  const audioReady = await waitForState(wsUrl, (s) => s.audioState === "ready", 80, "Audio enable for endurance run");
+  const audioReady = await waitForState(wsUrl, (s) => s.audioState === "ready" && s.reducedMotion, 80, "Audio enable under reduced motion");
   if (!audioReady.reducedMotion) throw new Error("Reduced-motion preference was lost when audio was enabled");
   await evaluate(wsUrl, `window.__phase12Probe.resetSamples(); true`);
   await callCdp(wsUrl, "HeapProfiler.collectGarbage");
   const baselineMetrics = metricsMap(await callCdp(wsUrl, "Performance.getMetrics"));
+  const browserVersion = (await callCdp(wsUrl, "Browser.getVersion"))?.product ?? "unknown";
+  const rendererInfo = await evaluate(wsUrl, `(() => { const canvas=document.querySelector('.viewport canvas'); const gl=canvas?.getContext('webgl2') || canvas?.getContext('webgl'); if(!gl) return 'unknown'; const ext=gl.getExtension('WEBGL_debug_renderer_info'); return ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER); })()`);
 
   const runEvidence = [];
   let previousCredits = 0;
@@ -287,12 +291,15 @@ try {
     runEvidence.push({ run: runIndex, payout: docked.payout, creditsAfterSettlement: docked.credits, condition: secured.cargoCondition });
     await clickElement(wsUrl, "#launch-next-run");
     const fresh = await waitForState(wsUrl, (s) => s.runState === "field" && s.completedRuns === runIndex && s.failedRuns === 0 && s.bodies === 7 && s.graph.includes("6 nodes / 6 edges / 0 supports") && s.settlement === "field", 120, `Fresh run after endurance settlement ${runIndex}`);
-    if (fresh.activeListeners !== baselineListeners) throw new Error(`Listener count grew after run ${runIndex}: ${fresh.activeListeners} vs ${baselineListeners}`);
+    const freshListeners = await listenerSnapshot(wsUrl);
+    if (JSON.stringify(freshListeners) !== JSON.stringify(baselineListeners)) throw new Error(`Listener ownership changed after run ${runIndex}: ${JSON.stringify(freshListeners)} vs ${JSON.stringify(baselineListeners)}`);
     if (fresh.presentationMeshes !== baselineMeshes) throw new Error(`Presentation mesh count drifted after run ${runIndex}: ${fresh.presentationMeshes} vs ${baselineMeshes}`);
     if (Math.abs(fresh.clampLimit - UPGRADED_CAPTURE_LIMIT) > 0.001) throw new Error(`Purchased clamp capability was not preserved on fresh run ${runIndex + 1}: ${JSON.stringify(fresh)}`);
   }
 
   const beforeRecovery = await currentState(wsUrl);
+  const finalListeners = await listenerSnapshot(wsUrl);
+  if (JSON.stringify(finalListeners) !== JSON.stringify(baselineListeners)) throw new Error(`Final listener ownership drifted before recovery: ${JSON.stringify(finalListeners)} vs ${JSON.stringify(baselineListeners)}`);
   const expectedCredits = beforeRecovery.credits;
   const expectedCompletedRuns = beforeRecovery.completedRuns;
   const expectedRunId = beforeRecovery.runId;
@@ -318,15 +325,15 @@ try {
     environment: {
       runner: "github-hosted-ubuntu",
       browserPath,
-      browserVersion: browserOutput.match(/Chrome\/[0-9.]+/)?.[0] ?? "reported-by-runner-unavailable",
-      renderer: "WebGL / SwiftShader requested by gate",
+      browserVersion,
+      renderer: rendererInfo,
       viewport: { width: 1280, height: 900 },
       devicePixelRatio: 1,
       network: "localhost production preview",
     },
     budgets: BUDGET,
     performance,
-    lifecycle: { baselineListeners, finalListenersBeforeReload: beforeRecovery.activeListeners, baselineMeshes, finalMeshesBeforeReload: beforeRecovery.presentationMeshes, freshBodyRecords: beforeRecovery.bodies, freshGraph: beforeRecovery.graph },
+    lifecycle: { baselineListeners, finalListenersBeforeReload: finalListeners, baselineMeshes, finalMeshesBeforeReload: beforeRecovery.presentationMeshes, freshBodyRecords: beforeRecovery.bodies, freshGraph: beforeRecovery.graph },
     progression: { completedRuns: expectedCompletedRuns, credits: expectedCredits, recoveredLoadState: recovered.saveState, runEvidence },
     browserMetrics: {
       baseline: { JSHeapUsedSize: baselineMetrics.JSHeapUsedSize ?? null, Nodes: baselineMetrics.Nodes ?? null, TaskDuration: baselineMetrics.TaskDuration ?? null },
@@ -337,7 +344,7 @@ try {
   };
   writeFileSync(EVIDENCE_PATH, `${JSON.stringify(evidence, null, 2)}\n`);
 
-  console.log(`phase12 smoke: three-run endurance/reduced-motion/save-recovery/performance gate passed in ${browserPath}; frames=${performance.frameCount}; p95=${performance.frameP95Ms.toFixed(2)}ms; p99=${performance.frameP99Ms.toFixed(2)}ms; slow=${performance.slowFramePercent.toFixed(2)}%; callbackP95=${performance.callbackP95Ms.toFixed(2)}ms; listeners=${baselineListeners}; meshes=${baselineMeshes}; completed=${expectedCompletedRuns}; credits=${expectedCredits}`);
+  console.log(`phase12 smoke: three-run endurance/reduced-motion/save-recovery/performance gate passed in ${browserPath}; frames=${performance.frameCount}; p95=${performance.frameP95Ms.toFixed(2)}ms; p99=${performance.frameP99Ms.toFixed(2)}ms; slow=${performance.slowFramePercent.toFixed(2)}%; callbackP95=${performance.callbackP95Ms.toFixed(2)}ms; listeners=${baselineListeners.total}; meshes=${baselineMeshes}; completed=${expectedCompletedRuns}; credits=${expectedCredits}`);
 } finally {
   await stopProcess(browser);
   await stopProcess(preview);
