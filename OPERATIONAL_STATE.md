@@ -2,7 +2,7 @@
 
 project_id: `orbital_scrapper`
 project_name: `Orbital Scrapper`
-revision: 14
+revision: 15
 repository: `westkitty/orbital_scrapper`
 default_branch: `main`
 
@@ -14,14 +14,16 @@ Greenfield physics-driven salvage game governed by `BUILD_CONTRACT.md`, with exe
 
 - `BUILD_CONTRACT.md` is the authoritative gameplay/build specification.
 - `IMPLEMENTATION_PLAN.md` is the authoritative staged execution sequence for that contract.
-- Phases 0 through 11 are implemented and verified on `main`.
+- Phases 0 through 12 are implemented and verified on `main`.
 - Current accepted runtime foundation: Three.js `0.185.0` + vanilla TypeScript `7.0.2` + Vite `8.2.1`, with `@dimforge/rapier3d-compat` `0.19.3` as physics authority.
 - `docs/PHASE0_ARCHITECTURE.md` records the accepted Phase 0 architecture and proof.
 - `docs/PHASE11_PRESENTATION.md` records the accepted production-presentation direction, authority boundaries, vacuum-audio rules, HUD hierarchy, and accessibility/readability constraints.
+- `docs/PHASE12_RELEASE_READINESS.md` records the selected static desktop-Chromium concept-release target, release budgets, lifecycle/accessibility/save policy, package contract, and evidence limits.
 - The current player-facing baseline is the complete reference-wreck salvage loop with production presentation enabled: structural scan and risk/value readout, physical flight/cutting/tethering, collapse/hull consequences, physical cargo capture and condition, extraction/sale, persistent credits, preparation dock, Clamp Dampers purchase, and a fresh next run that applies the persisted upgrade.
 - Phase 10 data-driven breadth remains verified behind the same mechanics: three wreck templates, bounded missing-section variants, per-component value/fragility metadata, and two additional persisted capability upgrades.
-- Phase 11 replaces the greybox presentation with local procedural production geometry, visible structural hardpoints, an edge-distributed cockpit HUD, derived scanner/cutter/tether/cargo/impact VFX, and user-enabled vacuum-aware Web Audio without changing simulation authority.
-- No Phase 12 performance/endurance/release-readiness claims are verified yet.
+- Phase 11 production presentation remains verified after Phase 12 optimization: local procedural production geometry, exact visible structural hardpoints, edge-distributed cockpit HUD, derived scanner/cutter/tether/cargo/impact VFX, and user-enabled vacuum-aware Web Audio without changing simulation authority.
+- Phase 12 verifies release-candidate readiness only for the selected static desktop-Chromium concept target. The recorded CI performance environment is GitHub-hosted Ubuntu + headless Google Chrome + SwiftShader at `1280x900` with reduced motion; it is not evidence for mobile thermals, Safari, Firefox, consumer GPU tiers, native installation, or broader accessibility certification.
+- PR #13 was squash-merged to `main` as `9533e5b905bbdbeec1a613700af745910f61f1b8` after the Phase 12 gate and every Phase 0–11 regression gate passed on the same candidate head.
 
 ## Artifact contract
 
@@ -99,66 +101,73 @@ Implementation advances one gated phase at a time. A later phase must not depend
 - INV-062: `ProductionAudio` is a derived, disposable, user-enabled Web Audio layer. Exterior-vacuum events may be represented only through justified ship/tether/cutter conduction, structural impact vibration, cockpit instrumentation, radio when later added, or non-diegetic music; ordinary airborne exterior sound is prohibited.
 - INV-063: Collapse music intensity is derived from current measured collapse severity rather than a scripted timer. Audio enable/disable state must never change simulation state.
 - INV-064: Production readability is not color-only. Risk, hazard, tool load/progress, and cargo condition retain explicit textual communication; the physical worksite and center reticle remain unobscured during the desktop proof path, and detailed telemetry is secondary progressive disclosure.
+- INV-065: Phase 12 release readiness is scoped to the selected static desktop-Chromium concept target served over ordinary HTTP. CI frame-time evidence applies only to the recorded Ubuntu/Chrome/SwiftShader/`1280x900` reduced-motion environment and must not be generalized to untested browsers, devices, GPU tiers, native wrappers, or mobile thermals.
+- INV-066: The concept-release simulation budget is at most `24` enabled rigid bodies in any shipped wreck scene; the current reference expectation is `7` including the craft. Sleeping/activation may reduce cost, but loose hazardous salvage must not be deleted merely to satisfy the budget.
+- INV-067: Presentation impact debris is capped at the existing `14` pooled sparks. Effects age back to the pool and must not allocate unbounded debris or substitute for real wreck bodies.
+- INV-068: `ProductionAudio` owns at most one live Web Audio context and seven production tone nodes across repeated mute/re-enable cycles. Toggling audio must reuse/suspend the existing graph rather than accumulate a second graph.
+- INV-069: The protected progression key remains `orbital-scrapper-progression-v1`; Phase 12 maintains a synchronized last-known-good companion copy at `orbital-scrapper-progression-v1-backup`. A valid backup may heal a malformed/unsupported primary only without duplicating credits, upgrades, or run accounting.
+- INV-070: Scenario `phase12-endurance-v1` is the selected CI performance gate: at least `300` recorded frame intervals, frame p95 `<= 33.4 ms`, frame p99 `<= 50 ms`, frames over `50 ms` `<= 2%`, and application frame-callback p95 `<= 20 ms`. Thresholds must not be relaxed merely to make a candidate pass.
+- INV-071: Phase 12 presentation-cost optimization remains subordinate to INV-060 and the verified gameplay loop. Lower-cost materials, lower tessellation, and removal of dynamic shadow casting are acceptable only while exact hardpoints, body ownership, readable module identity, and all Phase 0–11 regressions remain green.
 
 ## Verified working behavior
 
 ### Phase 0 — Runtime, physics, and reset foundation
 
-Original proof: `Phase 0 Runtime Gate` run `32326833764`. Current Phase 11-head regression: `Phase 0 Regression Gate` run `32356960147`.
+Original proof: `Phase 0 Runtime Gate` run `32326833764`. Latest Phase 12-head regression: `Phase 0 Regression Gate` run `32365511135`.
 
 Verified: pinned dependencies; fixed-step simulation; collision/gravity fixture; runtime joint remove/recreate; clean repeated physics/presentation resets; input lifecycle; production typecheck/build.
 
 ### Phase 1 — Salvage craft flight
 
-Original proof: `Phase 1 Flight Gate` run `32328133794`. Current regression: `32356960061`.
+Original proof: `Phase 1 Flight Gate` run `32328133794`. Latest regression: `32365511245`.
 
 Verified: dynamic Rapier craft; six-axis force/torque flight; fixed-step independence; inertial coasting and bounded braking; precision approach/translate/rotate/retreat; collision containment; reset/presenter cleanup.
 
 ### Phase 2 — Modular wreck physics
 
-Original proof: `Phase 2 Wreck Gate` run `32328786755`. Current regression: `32356959982`.
+Original proof: `Phase 2 Wreck Gate` run `32328786755`. Latest regression: `32365511175`.
 
 Verified: six stable reference-wreck components/six live joints; reusable attachment metadata; mass distinction; alternate rear load paths; coherent idle assembly; stable craft impact; exact reset; presentation uniqueness.
 
 ### Phase 3 — Cutting and physical separation
 
-Original proof: `Phase 3 Cutting Gate` run `32331609212`. Current regression: `32356960010`.
+Original proof: `Phase 3 Cutting Gate` run `32331609212`. Latest regression: `32365511224`.
 
 Verified: explicit cuttable metadata; range/aim/hold rules; exact joint removal preserving bodies/components; physical separation; cutter release latch; reachable-target-first selection; exact reconstruction.
 
 ### Phase 4 — Tether manipulation and bracing
 
-Original proof: `Phase 4 Tether Gate` run `32333422171`. Current regression: `32356960257`.
+Original proof: `Phase 4 Tether Gate` run `32333422171`. Latest regression: `32365511141`.
 
 Verified: bounded equal-and-opposite tether force; winching; drift arrest/redirection; overload snap/rearm; bracing changes post-cut motion; removable-side targeting; clean release/reset.
 
 ### Phase 5 — Structural graph synchronization
 
-Original proof: `Phase 5 Structural Graph Gate` run `32337246778`. Current regression: `32356960244`.
+Original proof: `Phase 5 Structural Graph Gate` run `32337246778`. Latest regression: `32365511259`.
 
 Verified: exact physical-to-graph mirroring; connected-section/bridge/articulation facts; cut synchronization; temporary support separation; exact graph reset.
 
 ### Phase 6 — Scanner and structural criticality
 
-Original proof: `Phase 6 Scanner Gate` run `32338441743`. Current regression: `32356959944`.
+Original proof: `Phase 6 Scanner Gate` run `32338441743`. Latest regression: `32365511241`.
 
 Verified: live read-only structural estimates; low/moderate/high reference distinctions; inspectable bridge/alternate-path/articulation/mass/motion/support reasons; support-driven estimate changes; stale-target rejection; exact reset.
 
 ### Phase 7 — Collapse escalation and survival damage
 
-Original proof: `Phase 7 Collapse Gate` run `32342058172`. Current regression: `32356960054`.
+Original proof: `Phase 7 Collapse Gate` run `32342058172`. Latest regression: `32365511269`.
 
 Verified: Rapier contact-force evidence; simulation-derived severity/warnings; physical debris hull damage; continuing physics after destruction; thresholded impact-overload failure; stationary failure versus reverse-thrust survival; low-risk regression; tether trajectory change; exact reset.
 
 ### Phase 8 — Cargo capture, condition, and settlement
 
-Original proof: `Phase 8 Cargo Gate` run `32343609183`. Current regression: `Phase 8 Regression Gate` run `32356960344`.
+Original proof: `Phase 8 Cargo Gate` run `32343609183`. Latest regression: `Phase 8 Regression Gate` run `32365511227`.
 
 Verified: detached-only cargo eligibility; physical tether/clamp recovery; default `1.35 m/s` speed rejection; measured-impact condition damage; metadata-adjusted fragility; condition-adjusted value; disabled secured cargo lifecycle; physical `11.5 m` extraction requirement; visible settlement; exact cargo/reset baseline.
 
 ### Phase 9 — Upgrade, persistence, and complete vertical slice
 
-Original proof: `Phase 9 Vertical Slice Gate` run `32345788643`, job `96354158978`. Current Phase 11-head regression: `Phase 9 Regression Gate` run `32356960018`.
+Original proof: `Phase 9 Vertical Slice Gate` run `32345788643`, job `96354158978`. Latest regression: `Phase 9 Regression Gate` run `32365511230`.
 
 Verified:
 
@@ -172,7 +181,7 @@ Verified:
 
 ### Phase 10 — Wreck variety and progression breadth
 
-Original proof: `Phase 10 Breadth Gate` run `32352461479`, job `96374389172`. Current Phase 11-head regression: `Phase 10 Regression Gate` run `32356959964`.
+Original proof: `Phase 10 Breadth Gate` run `32352461479`, job `96374389172`. Latest regression: `Phase 10 Regression Gate` run `32365511557`.
 
 Verified:
 
@@ -186,46 +195,58 @@ Verified:
 
 ### Phase 11 — Production readability, visual assets, audio, and feel
 
-Verified by `Phase 11 Presentation Gate` run `32356960223`, job `96388110247`, with every Phase 0–10 regression workflow green on the same final head.
+Original proof: `Phase 11 Presentation Gate` run `32356960223`, job `96388110247`. Latest regression: `Phase 11 Regression Gate` run `32365511127`.
 
 Verified:
 
-- seventy-eight of seventy-eight combined tests pass;
+- the Phase 11 presentation contract remains green after the Phase 12 performance optimization;
 - TypeScript checking and the Vite production build pass;
-- Phase 11 production JavaScript is approximately `2.855 MB` minified / `999.94 KB` gzip; production CSS is approximately `10.26 KB` minified / `3.14 KB` gzip;
 - all Phase 10 component classes render through the same production presenter ownership path while preserving one top-level presentation object per physics body;
 - production presenter rebuild/sync leaves authoritative Rapier body transforms and connection points unchanged;
 - every visible production hardpoint marker tested matches the corresponding component-local attachment coordinate exactly;
-- the production salvage craft and wreck modules use local procedural Three.js geometry; no external models, textures, fonts, visual libraries, audio files, or third-party recordings are required by the verified proof path;
-- `ProductionFx` provides live scanner, cutter-progress, tether-load, cargo-envelope, thruster, and measured-impact communication without mutating physical topology;
-- tether presentation changes color with measured load while also retaining explicit text load communication;
-- the center worksite remains the dominant viewport and the production scanner card does not overlap the center reticle in the `1280x900` Chrome proof;
-- detailed telemetry is collapsed during normal play and remains available through native progressive disclosure;
-- reduced-motion presentation rules and keyboard-visible control focus are present in the production interface;
-- the Web Audio graph is user-enabled and disposable; the verified channel set is ship hum, thruster conduction, tether conduction, cutter conduction, impact structure, warning instrumentation, and collapse music;
-- no ordinary-air exterior audio channel is present in the verified Phase 11 mix;
-- collapse-music gain rises monotonically with measured `CollapseSystem.severityScore` in focused tests;
-- headless Google Chrome completes the production presentation path with `44` presentation meshes, live `spine-panel` scanner target, user-enabled audio state `ready`, physical cutter completion on `spine-panel`, physical tether target `panel`, and exact reset to `6 nodes / 6 edges / 0 supports`;
-- the unchanged complete Phase 9 Chrome journey then passes with production presentation enabled: scan -> cut -> tether -> capture -> return -> sell -> Clamp Dampers purchase -> next run -> reload;
-- that final integrated Chrome proof reports `payout=167`, persistent `credits=17`, upgraded clamp ceiling `2.00 m/s`, run IDs `1 -> 2 -> 3`, and recovered panel condition `66.8%`;
-- final Phase 0–10 regression runs `32356960147`, `32356960061`, `32356959982`, `32356960010`, `32356960257`, `32356960244`, `32356959944`, `32356960054`, `32356960344`, `32356960018`, and `32356959964` all pass on the same Phase 11 candidate head;
-- the final authorship scrub found no model/assistant/generation credit or process residue in the changed user-facing presentation surfaces.
+- production craft/wreck geometry remains local procedural Three.js content with no external model/texture/font/audio dependency required by the verified path;
+- `ProductionFx`, worksite/reticle layout, reduced-motion/focus/readability rules, and vacuum-aware audio authority boundaries remain regression-protected;
+- Phase 12 reduces the reference presentation baseline from the historical Phase 11 `44` meshes to `34` meshes while keeping the complete production vertical slice green.
+
+### Phase 12 — Performance, endurance, accessibility, and release readiness
+
+Verified by `Phase 12 Release Readiness Gate` run `32365511137`, job `96414045259`, with every Phase 0–11 regression workflow green on the same final candidate head `3b0b7aeff7841a501e63fee7517c20d0fd9f822a`.
+
+Verified:
+
+- eighty-three of eighty-three combined tests pass;
+- exact declared dependencies remain Three.js `0.185.0`, Rapier `0.19.3`, TypeScript `7.0.2`, and Vite `8.2.1` under Node `22.22.0` / npm `10.9.4` in the gate;
+- every shipped concept-release wreck configuration remains inside the `24` enabled-rigid-body budget and uses Rapier sleeping/activation rather than a second simulation representation;
+- secured cargo leaves expensive active physics only after the existing valid capture transition while preserving stable identity for settlement/reset;
+- impact presentation uses the fixed reusable `14`-spark pool rather than unbounded debris allocation;
+- Web Audio mute/re-enable reuses exactly one context and seven production nodes;
+- last-known-good progression recovery heals a malformed primary from a valid backup without duplicating or losing progression;
+- deterministic `npm run package:release` succeeds, producing the static package directory with three production build files plus release manifest/README; the packaged production payload reports `2,865,858` bytes before CI artifact compression;
+- the final production JavaScript is approximately `2,855.06 KB` minified / `999.88 KB` gzip, with CSS approximately `10.26 KB` / `3.14 KB` gzip;
+- three sequential complete salvage runs pass in one reduced-motion Chrome session with no equivalent-checkpoint listener/body/graph/presentation growth;
+- the measured Phase 12 CI capture records `1,695` frame intervals, frame p95 `33.40 ms`, frame p99 `33.40 ms`, only `0.35%` frames over `50 ms`, and application callback p95 `3.30 ms`, satisfying the locked budget;
+- the same endurance proof reports stable `10` active listeners, `34` presentation meshes, `3` completed runs, and `346` credits after the scripted sequence;
+- the unchanged final Phase 9 production journey passes after endurance testing: scan -> cut -> tether -> capture -> return -> sell -> Clamp Dampers purchase -> next run -> reload, reporting `payout=166`, `credits=16`, clamp `2.00`, run IDs `1->2->3`, and condition `66.4`;
+- release artifact `orbital-scrapper-phase12-release` was uploaded as Actions artifact ID `9405152876`; performance evidence artifact `orbital-scrapper-phase12-performance` was uploaded as ID `9405153345`;
+- final Phase 0–11 regression runs `32365511135`, `32365511245`, `32365511175`, `32365511224`, `32365511141`, `32365511259`, `32365511241`, `32365511269`, `32365511227`, `32365511230`, `32365511557`, and `32365511127` all pass on the same candidate head;
+- PR #13 was squash-merged to `main` as `9533e5b905bbdbeec1a613700af745910f61f1b8`.
 
 ## Implemented but unverified
 
-None for the current authorized phase boundary.
+None for the completed Phase 0–12 implementation sequence.
 
 ## Known not-working behavior
 
-None established in the accepted Phase 0–11 scope.
+None established inside the selected static desktop-Chromium concept-release target.
 
 ## Known observations / deferred maintenance
 
-- Phase 11 production JavaScript is approximately `2.855 MB` minified / `999.94 KB` gzip. Bundle reduction/code splitting and representative runtime profiling are Phase 12 work.
+- The final Phase 12 JavaScript bundle remains approximately `2.855 MB` minified / `999.88 KB` gzip. The measured release target passes despite that size; code splitting remains a future optimization opportunity rather than a Phase 12 blocker.
+- The final CI frame p95 is exactly `33.40 ms`, equal to the declared Phase 12 ceiling. The selected CI target therefore passes with essentially no p95 headroom; future presentation/runtime additions must rerun the matched performance gate rather than assume spare budget.
 - Rapier emits an initialization deprecation warning in tests. Behavior is verified; API cleanup remains deferred.
-- GitHub Actions warns about deprecated internal Node 20 runtimes in `actions/checkout@v4` and `actions/setup-node@v4`; hosted runners force Node 24 and the gates pass. CI-action maintenance is deferred.
+- GitHub Actions warns about deprecated internal Node 20 runtimes in `actions/checkout@v4`, `actions/setup-node@v4`, and `actions/upload-artifact@v4`; hosted runners force Node 24 and the gates pass. CI-action maintenance is deferred.
 - Phase 1 handling constants remain proof values, not final tuning.
-- The three Phase 10 wreck templates, component dimensions/masses, salvage values, fragility multipliers, and missing-section variants remain proof content even though Phase 11 gives them production-readable procedural presentation.
+- The three Phase 10 wreck templates, component dimensions/masses, salvage values, fragility multipliers, and missing-section variants remain proof content even though Phase 11/12 give them production-readable procedural presentation.
 - Phase 3 cutter thresholds/release impulse remain proof values.
 - Phase 4 tether range/spring/damping/winch/overload limits remain proof values.
 - Phase 5 graph reconciliation remains correctness-first and should be optimized only with profiling evidence.
@@ -234,26 +255,27 @@ None established in the accepted Phase 0–11 scope.
 - Phase 8 cargo proof constants remain: clamp radius `3 m`, default max relative speed `1.35 m/s`, damage impulse threshold `0.8 N·s`, condition conversion `10` points per excess `N·s`, extraction distance `11.5 m`.
 - Phase 9 Clamp Dampers cost `150` and upgraded limit `2.00 m/s` remain proof balance values.
 - Phase 10 Tether Reinforcement cost `140` / `105 N` and Cutter Optics cost `160` / `12 m` remain proof balance/capability values.
-- Progression stores version-two data under the intentionally unchanged browser `localStorage` key `orbital-scrapper-progression-v1`. This is verified for the concept build, not yet a final cross-device/cloud save decision.
+- Progression version two intentionally remains under browser key `orbital-scrapper-progression-v1`, now paired with `orbital-scrapper-progression-v1-backup` for last-known-good recovery. This is verified for the selected browser concept release, not a final cross-device/cloud-save decision.
 - The current player-facing dock still exposes the original Clamp Dampers purchase path. Tether Reinforcement and Cutter Optics are verified persisted capability paths/configuration effects but do not yet have equivalent production-facing purchase controls.
-- Phase 11 production assets are local procedural geometry and generated Web Audio proof tones. They establish the production direction and integration contract but do not settle whether later authored models/textures/recordings replace or supplement them.
+- Phase 11/12 production assets remain local procedural geometry and generated Web Audio proof tones. They establish the production direction and verified concept-release integration contract but do not settle whether later authored models/textures/recordings replace or supplement them.
 - Browser autoplay rules require the player to explicitly enable the verified Web Audio presentation layer; muted operation remains fully playable.
-- The live Phase 11 integrated recovery settled at `66.8%` condition and `167` proof-unit payout. This validates presentation compatibility with gameplay-derived value loss, not final economy/condition balance.
-- The first Phase 11 gate attempt passed seventy-seven of seventy-eight tests; its only failure was a VFX-only fixture that attempted a real tether attach from beyond the protected tether range. The fixture was corrected to test presentation diagnostics independently; production tether behavior was unchanged.
-- The second Phase 11 gate attempt passed all tests/build/browser behavior but initially returned failure after the success line because Chrome was still releasing its temporary profile during cleanup. Profile deletion was made best-effort after browser shutdown; all behavioral assertions remained strict.
+- The final Phase 12 integrated Phase 9 regression settled at `66.4%` condition and `166` proof-unit payout. This validates release compatibility with gameplay-derived value loss, not final economy/condition balance.
+- Phase 12 gate history: the first two failures were harness defects involving document-reload loss of reduced-motion/instrumentation state; after the live-target harness was corrected, the third run exposed a real performance blocker at frame p95 `50.10 ms` against the locked `33.4 ms` ceiling. The final bounded presentation optimization reduced tessellation/material/shadow cost without changing physics/hardpoint authority and the fourth run passed without relaxing thresholds.
+- Phase 11 gate history includes an out-of-range VFX test fixture and a Chrome-profile cleanup race; both were harness/test-only repairs and did not change production mechanics.
 - Phase 10's first breadth gate failure was a test-fixture issue caused by advancing tether impulses without advancing Rapier; production tether constants were not changed.
 - Phase 8 gate history includes an unsafe long browser thrust hold, a transient no-DevTools startup, and an overstrict pristine-cargo assumption; all were repaired without weakening the physical contract.
 - Phase 9 pre-CI review caught a stale-run replay gap and tightened run accounting so only the currently issued run may settle/fail.
 
 ## Unknown / unresolved
 
-- final distribution/package format and supported deployment target
-- final shipping control scheme, input rebinding policy, and accessibility control set beyond current keyboard controls
-- final performance targets by representative device/browser tier
+- distribution beyond the selected static desktop-Chromium HTTP-served concept package, including native installers, signing/notarization, app stores, `file://` loading, service-worker/offline behavior, and cloud deployment policy
+- final shipping control scheme beyond the verified keyboard layout, including configurable rebinding, gamepad support, and broader input-accessibility policy
+- accessibility certification beyond current keyboard operability, visible focus, reduced motion, and non-color-only communication; screen-reader certification and a formal conformance level remain untested
+- representative performance targets/results for consumer integrated/discrete GPUs, Safari, Firefox, mobile/tablet devices, thermals, and sustained sessions beyond the recorded CI environment
 - final camera model beyond the current presentation-only chase camera
 - final economy tuning/currency scale and upgrade catalog beyond the three verified proof upgrades
 - final simultaneous tether count beyond the current single active proof tether
-- final production save format, migration/backups, cross-device behavior, and whether browser `localStorage` remains appropriate
+- final production save/storage strategy beyond the verified browser `localStorage` primary + last-known-good backup path, including cross-device sync/cloud behavior
 - final production wreck dimensions, masses, attachment layouts, and whether content remains hand-authored templates or adds a bounded layout-generation strategy
 - final cutter energy/heat model, tuning, and whether release impulse remains production behavior
 - final tether tuning, targeting UX, failure model, and whether the proof spring/damping winch remains production behavior
@@ -261,8 +283,8 @@ None established in the accepted Phase 0–11 scope.
 - final collapse severity/hull/impact/secondary-break tuning beyond the verified production warning/audio presentation
 - final cargo hardware/interaction, clamp shape, relative-speed rule, condition scale, impact mapping, values, payout formula, and secured-cargo unloading strategy
 - final failure economy and preparation-dock breadth
-- whether procedural Phase 11 geometry/audio remain final assets or become placeholders for a future provenance-tracked authored/external asset pipeline
-- long-session audio/geometry/resource lifecycle behavior beyond the current focused disposal/reset checks
+- whether procedural Phase 11/12 geometry/audio remain final assets or become placeholders for a future provenance-tracked authored/external asset pipeline
+- lifecycle behavior beyond three sequential full runs in one page session and beyond the selected CI runtime/device class
 
 ## Resolved decisions
 
@@ -296,28 +318,20 @@ None established in the accepted Phase 0–11 scope.
 - Phase 11 production VFX: scanner/cutter/tether/cargo/thruster/impact effects are derived from live systems under disposable `phase11-fx-root`
 - Phase 11 production audio: user-enabled Web Audio using ship/tether/cutter conduction, structural impact, cockpit instrumentation, and severity-driven non-diegetic music; ordinary-air exterior audio is excluded
 - Phase 11 asset-source decision for the verified proof: local procedural Three.js geometry and generated Web Audio only; no external resource licensing/provenance burden was introduced
+- Phase 12 concept-release target: static Vite production output served over ordinary HTTP in a desktop Chromium-class browser; no framework migration, native wrapper, cloud/account system, or installer is required for the verified target
+- Phase 12 simulation budget: maximum `24` enabled rigid bodies across shipped concept-release wreck scenes; current reference expectation `7`; sleeping is allowed and secured cargo is explicitly disabled only after valid capture
+- Phase 12 visual-debris budget: existing `14`-spark `ProductionFx` pool remains the upper bounded presentation-debris path
+- Phase 12 performance gate: scenario `phase12-endurance-v1`, GitHub Ubuntu + headless Chrome + SwiftShader + `1280x900` + reduced motion, with locked p95/p99/slow-frame/callback thresholds in INV-070
+- Phase 12 accessibility scope: existing keyboard controls + visible focus + reduced-motion support + non-color-only status communication; rebinding/gamepad/screen-reader certification remain out of scope
+- Phase 12 save resilience: primary `orbital-scrapper-progression-v1` plus synchronized last-known-good `orbital-scrapper-progression-v1-backup`
+- Phase 12 release package: `npm run package:release` -> `release/orbital-scrapper-web/` containing production files plus `RELEASE_MANIFEST.json` and `README.txt`; CI uploads this directory and the performance capture as release evidence
+- Phase 12 production-rendering optimization: lower-cost `MeshLambertMaterial`, reduced primitive tessellation, and disabled dynamic shadow casting preserve exact hardpoints/body ownership while reducing the reference presentation baseline to `34` meshes
 
 ## Pending work
 
-### Phase 12 — Performance, endurance, accessibility, and release readiness
+No further implementation phase is authorized by the current `IMPLEMENTATION_PLAN.md`. The proof-gated Phase 0–12 concept-release sequence is complete for the selected static desktop-Chromium target.
 
-This is the only authorized next implementation phase under the current staged plan.
-
-Required proof set:
-
-- establish and enforce a representative active rigid-body budget and sleeping/activation policy;
-- define debris cleanup/deactivation and secured-cargo simulation-budget behavior without breaking the salvage contract;
-- prove resource, listener, Three.js, Web Audio, and gameplay-state cleanup across repeated full runs;
-- harden save/progression resilience for the selected release path;
-- add the input rebinding/accessibility controls appropriate to the selected target and prove required controls remain usable;
-- preserve failure recovery and exact playable restart behavior;
-- select and document the release/package path for the target platform;
-- add diagnostics sufficient to reproduce performance/lifecycle failures;
-- prove multiple complete salvage runs can execute sequentially without accumulating duplicate bodies, constraints, listeners, audio instances, stale graph/support/cargo state, or progression accounting;
-- define a representative performance target and prove representative collapses stay within it on the tested runtime/device class;
-- prove save/load does not duplicate or lose progression in the tested release path;
-- rerun the complete production-presentation vertical slice on a representative production wreck after endurance testing;
-- do not claim release-candidate readiness until these checks pass.
+Any additional feature phase, broader platform release, production-content expansion, new accessibility commitment, consumer-hardware performance target, native packaging, or post-concept release program requires an explicit new contract/plan rather than silently inventing Phase 13.
 
 ## Staged implementation sequence
 
@@ -333,38 +347,38 @@ Required proof set:
 10. Phase 9 — Upgrade, persistence, and complete vertical slice — **verified**
 11. Phase 10 — Wreck variety and progression breadth — **verified**
 12. Phase 11 — Production readability, visual assets, audio, and feel — **verified**
-13. Phase 12 — Performance, endurance, accessibility, and release readiness — **authorized next**
+13. Phase 12 — Performance, endurance, accessibility, and release readiness — **verified**
 
-Each phase requires focused direct testing plus the smallest relevant regression check before completion can be claimed.
+The current staged plan is complete. A future phase requires an explicit new authorized plan and must preserve the verified Phase 0–12 invariants.
 
 ## Validation matrix
 
 | ID | Claim | State | Required proof |
 |---|---|---|---|
-| VAL-000 | Runtime foundation is suitable | verified | Phase 0 proof `32326833764`; current regression `32356960147` |
-| VAL-001 | Full salvage loop works | verified | Phase 9 proof `32345788643`; production-presentation Chrome regression inside Phase 11 run `32356960223` |
-| VAL-002 | Structural graph tracks physical cuts | verified | Phase 5 proof `32337246778`; current regression `32356960244` |
-| VAL-003 | Dangerous cut produces simulated cascade | verified | Phase 7 proof `32342058172`; current regression `32356960054` |
-| VAL-004 | Tether changes dangerous outcome | verified | Phase 4 proof `32333422171`; current regression `32356960257`; Phase 10 capability proof preserved |
-| VAL-005 | Reset/recovery is clean | verified through Phase 11 | Phase 0–11 lifecycle/reset tests plus Phase 11 browser reset to `6 nodes / 6 edges / 0 supports` |
-| VAL-006 | Progression changes next run | verified | Phase 9 Clamp Dampers proof plus Phase 10 persisted Tether Reinforcement/Cutter Optics capability tests |
-| VAL-007 | Phase gates are respected | verified through Phase 11 | Phase 11 gate plus all Phase 0–10 regressions passed on the same final head before merge |
-| VAL-008 | Salvage craft flight is controllable | verified | Phase 1 proof `32328133794`; current regression `32356960061` |
-| VAL-009 | Modular wreck remains coherent and stable | verified across Phase 10 templates | Phase 2 proof `32328786755`; Phase 10 breadth proof; current presentation regression |
-| VAL-010 | Cutting removes intended physical connection and produces natural separation | verified | Phase 3 proof `32331609212`; current regression `32356960010`; live Phase 11 Chrome cut |
-| VAL-011 | Tether manipulation/bracing materially change physical outcomes | verified | Phase 4 proof `32333422171`; current regression `32356960257`; live Phase 11 Chrome tether |
-| VAL-012 | Structural graph mirrors live topology/support state | verified | Phase 5 proof `32337246778`; current regression `32356960244`; Phase 11 exact reset |
-| VAL-013 | Scanner explains current structural risk without stale/oracle behavior | verified | Phase 6 proof `32338441743`; current regression `32356959944`; production scanner presentation proof |
-| VAL-014 | Structural mistakes escalate into readable survivable physical danger | verified | Phase 7 proof `32342058172`; current regression `32356960054`; Phase 11 warning/audio presentation is derived from same live severity |
-| VAL-015 | Salvage can be physically recovered, condition-valued, secured, returned, and settled | verified | Phase 8 proof `32343609183`; current regression `32356960344`; complete production Phase 9 Chrome loop |
-| VAL-016 | Content/progression breadth works across varied wrecks without bespoke exceptions | verified | Phase 10 proof `32352461479`; current regression `32356959964` |
-| VAL-017 | Production presentation improves readability without obscuring the structural game | verified | Phase 11 run `32356960223`, job `96388110247`: 78/78 tests, exact hardpoint preservation, worksite/reticle layout proof, live scanner/cutter/tether/audio Chrome path, build, and unchanged complete Phase 9 Chrome regression |
-| VAL-018 | Representative build is performance/endurance/accessibility/release ready | pending | Phase 12 endurance/performance/accessibility/save/package gate plus production vertical-slice regression |
+| VAL-000 | Runtime foundation is suitable | verified | Phase 0 proof `32326833764`; latest regression `32365511135` |
+| VAL-001 | Full salvage loop works | verified | Phase 9 proof `32345788643`; final production Chrome regression inside Phase 12 run `32365511137` |
+| VAL-002 | Structural graph tracks physical cuts | verified | Phase 5 proof `32337246778`; latest regression `32365511259` |
+| VAL-003 | Dangerous cut produces simulated cascade | verified | Phase 7 proof `32342058172`; latest regression `32365511269` |
+| VAL-004 | Tether changes dangerous outcome | verified | Phase 4 proof `32333422171`; latest regression `32365511141`; Phase 10 capability proof preserved |
+| VAL-005 | Reset/recovery is clean | verified through Phase 12 | Phase 0–12 lifecycle/reset tests plus three-run endurance checkpoints and final full-loop regression |
+| VAL-006 | Progression changes next run | verified | Phase 9 Clamp Dampers proof plus Phase 10 persisted Tether Reinforcement/Cutter Optics capability tests plus Phase 12 backup/reload proof |
+| VAL-007 | Phase gates are respected | verified through Phase 12 | Phase 12 gate plus every Phase 0–11 regression passed on the same final head before merge |
+| VAL-008 | Salvage craft flight is controllable | verified | Phase 1 proof `32328133794`; latest regression `32365511245` |
+| VAL-009 | Modular wreck remains coherent and stable | verified across Phase 10 templates | Phase 2 proof `32328786755`; Phase 10 breadth proof; Phase 12 body-budget/regression proof |
+| VAL-010 | Cutting removes intended physical connection and produces natural separation | verified | Phase 3 proof `32331609212`; latest regression `32365511224`; final production loop |
+| VAL-011 | Tether manipulation/bracing materially change physical outcomes | verified | Phase 4 proof `32333422171`; latest regression `32365511141`; final production loop |
+| VAL-012 | Structural graph mirrors live topology/support state | verified | Phase 5 proof `32337246778`; latest regression `32365511259`; three-run exact graph checkpoints |
+| VAL-013 | Scanner explains current structural risk without stale/oracle behavior | verified | Phase 6 proof `32338441743`; latest regression `32365511241`; production scanner regression |
+| VAL-014 | Structural mistakes escalate into readable survivable physical danger | verified | Phase 7 proof `32342058172`; latest regression `32365511269`; production warning/audio path preserved |
+| VAL-015 | Salvage can be physically recovered, condition-valued, secured, returned, and settled | verified | Phase 8 proof `32343609183`; latest regression `32365511227`; final Phase 12 complete production loop |
+| VAL-016 | Content/progression breadth works across varied wrecks without bespoke exceptions | verified | Phase 10 proof `32352461479`; latest regression `32365511557` |
+| VAL-017 | Production presentation improves readability without obscuring the structural game | verified | Phase 11 proof `32356960223`; latest regression `32365511127`; Phase 12 exact hardpoint/body-ownership tests and full-loop proof after performance optimization |
+| VAL-018 | Representative build is performance/endurance/accessibility/release ready | verified for selected static desktop-Chromium concept target | Phase 12 run `32365511137`, job `96414045259`: 83/83 tests, deterministic package, three-run reduced-motion endurance, last-known-good save recovery, 1,695-frame performance capture within locked budgets, final Phase 9 production loop, and all Phase 0–11 regressions green |
 
 ## Prohibitions
 
-- Do not claim Phase 12 release readiness before runtime/endurance/package evidence exists.
-- Do not start a later release claim while the Phase 12 gate is failed or unverified.
+- Do not generalize Phase 12 release readiness beyond the selected static desktop-Chromium concept target or its recorded evidence envelope.
+- Do not invent or begin Phase 13 without an explicit new authorized contract/implementation plan.
 - Do not substitute scripted spectacle for structural simulation or hand-roll a physics engine.
 - Do not use production presentation to mask gameplay, physics, content-variation, progression, lifecycle, performance, or accessibility failures.
 - Do not move physics authority into Three.js transforms, presentation assets, VFX, audio state, scanner state, or persistence state.
@@ -388,12 +402,17 @@ Each phase requires focused direct testing plus the smallest relevant regression
 - Do not make risk, hazard direction, tether load, cutter progress, or cargo condition dependent on color alone.
 - Do not let a production overlay cover the center worksite/reticle or hide the physical relationship it describes.
 - Do not infer performance/release readiness from build success, short smoke tests, or current bundle size alone.
+- Do not relax the Phase 12 locked performance thresholds to admit a future candidate; optimize or explicitly revise the release contract with new authority.
 
 ## Revision history
 
+### Revision 15 — 2026-08-20
+
+Phase 12 passed `Phase 12 Release Readiness Gate` run `32365511137`, job `96414045259`, while Phase 0–11 regression runs `32365511135`, `32365511245`, `32365511175`, `32365511224`, `32365511141`, `32365511259`, `32365511241`, `32365511269`, `32365511227`, `32365511230`, `32365511557`, and `32365511127` all passed on the same final candidate head. Eighty-three of eighty-three combined tests passed. The final Chrome endurance proof completed three full reduced-motion salvage runs with `1,695` measured frame intervals, p95 `33.40 ms`, p99 `33.40 ms`, `0.35%` slow frames over `50 ms`, callback p95 `3.30 ms`, stable `10` listeners, `34` presentation meshes, `3` completed runs, and `346` credits. Last-known-good save recovery, single-context/seven-node Web Audio reuse, the `24`-body simulation budget, `14`-spark presentation pool, deterministic static packaging, and exact fresh-run lifecycle checkpoints were promoted to verified state. The unchanged complete Phase 9 production loop passed after endurance with `payout=166`, `credits=16`, clamp `2.00`, run IDs `1->2->3`, and condition `66.4`. Release artifact ID `9405152876` and performance-evidence artifact ID `9405153345` were uploaded. Two early Phase 12 failures were harness-only reduced-motion/instrumentation setup defects; the corrected live-target harness then exposed a real p95 `50.10 ms` performance failure against the locked `33.4 ms` budget. A bounded presentation-only repair switched to lower-cost materials/tessellation and removed dynamic shadow casting without altering physics/hardpoint authority; the final run passed without relaxing thresholds. PR #13 was squash-merged to `main` as `9533e5b905bbdbeec1a613700af745910f61f1b8`. The `IMPLEMENTATION_PLAN.md` Phase 0–12 sequence is now complete; no Phase 13 is authorized.
+
 ### Revision 14 — 2026-08-20
 
-Phase 11 passed `Phase 11 Presentation Gate` run `32356960223`, job `96388110247`, while Phase 0–10 regression runs `32356960147`, `32356960061`, `32356959982`, `32356960010`, `32356960257`, `32356960244`, `32356959944`, `32356960054`, `32356960344`, `32356960018`, and `32356959964` all passed on the same final head. Seventy-eight of seventy-eight combined tests passed. Promoted procedural production craft/wreck geometry, exact visible hardpoint preservation, worksite-dominant cockpit/HUD, derived scanner/cutter/tether/cargo/impact VFX, user-enabled vacuum-aware Web Audio, severity-driven collapse music, reduced-motion/focus/readability rules, and disposable presentation ownership to verified state. Production build passed at approximately `2.855 MB` JS / `999.94 KB` gzip and `10.26 KB` CSS / `3.14 KB` gzip. Phase 11 Chrome proof reported `44` presentation meshes, `spine-panel` scanner/cut, audio `ready`, tether target `panel`, and exact reset `6 nodes / 6 edges / 0 supports`. The unchanged complete Phase 9 Chrome loop also passed with production presentation enabled, reporting `payout=167`, `credits=17`, clamp `2.00 m/s`, run IDs `1->2->3`, and condition `66.8%`. The first Phase 11 attempt exposed an out-of-range VFX test fixture; the second passed all behavior but a Chrome-profile cleanup race falsely failed after success; both repairs were test/harness-only and did not change game mechanics or presentation behavior. PR #12 was squash-merged to `main` as `65789e5eca9dba475bd74ad694239b10faf93fad`. Phase 12 — Performance, Endurance, Accessibility, and Release Readiness is now the only authorized implementation phase.
+Phase 11 passed `Phase 11 Presentation Gate` run `32356960223`, job `96388110247`, while Phase 0–10 regression runs `32356960147`, `32356960061`, `32356959982`, `32356960010`, `32356960257`, `32356960244`, `32356959944`, `32356960054`, `32356960344`, `32356960018`, and `32356959964` all passed on the same final head. Seventy-eight of seventy-eight combined tests passed. Promoted procedural production craft/wreck geometry, exact visible hardpoint preservation, worksite-dominant cockpit/HUD, derived scanner/cutter/tether/cargo/impact VFX, user-enabled vacuum-aware Web Audio, severity-driven collapse music, reduced-motion/focus/readability rules, and disposable presentation ownership to verified state. Production build passed at approximately `2.855 MB` JS / `999.94 KB` gzip and `10.26 KB` CSS / `3.14 KB` gzip. Phase 11 Chrome proof reported `44` presentation meshes, `spine-panel` scanner/cut, audio `ready`, tether target `panel`, and exact reset `6 nodes / 6 edges / 0 supports`. The unchanged complete Phase 9 Chrome loop also passed with production presentation enabled, reporting `payout=167`, `credits=17`, clamp `2.00 m/s`, run IDs `1->2->3`, and condition `66.8%`. The first Phase 11 attempt exposed an out-of-range VFX test fixture; the second passed all behavior but a Chrome-profile cleanup race falsely failed after success; both repairs were test/harness-only and did not change game mechanics or presentation behavior. PR #12 was squash-merged to `main` as `65789e5eca9dba475bd74ad694239b10faf93fad`. Phase 12 — Performance, Endurance, Accessibility, and Release Readiness became the only authorized implementation phase.
 
 ### Revision 13 — 2026-08-20
 
