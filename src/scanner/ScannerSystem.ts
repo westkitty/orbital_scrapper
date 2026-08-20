@@ -37,8 +37,19 @@ function connectedSectionsWithoutEdge(graph: StructuralGraph, ignoredEdgeId: str
   return sections.sort((a, b) => a.length - b.length || a.join(",").localeCompare(b.join(",")));
 }
 function likelyFreeSection(graph: StructuralGraph, edge: StructuralEdgeRecord): readonly string[] {
-  if (!graph.isBridge(edge.id)) return []; const sections = connectedSectionsWithoutEdge(graph, edge.id); if (sections.length < 2) return [];
-  const withoutSpine = sections.filter((section) => !section.includes("spine")); if (withoutSpine.length === 1) return withoutSpine[0]; return sections[0];
+  if (!graph.isBridge(edge.id)) return [];
+  const sections = connectedSectionsWithoutEdge(graph, edge.id);
+  const sectionA = sections.find((section) => section.includes(edge.componentAId)) ?? [];
+  const sectionB = sections.find((section) => section.includes(edge.componentBId)) ?? [];
+  if (sectionA.length === 0 || sectionB.length === 0 || sectionA === sectionB) return [];
+
+  const aHasSpine = sectionA.includes("spine");
+  const bHasSpine = sectionB.includes("spine");
+  if (aHasSpine && !bHasSpine) return sectionB;
+  if (bHasSpine && !aHasSpine) return sectionA;
+
+  return [sectionA, sectionB]
+    .sort((a, b) => a.length - b.length || a.join(",").localeCompare(b.join(",")))[0];
 }
 function supportForEdge(supports: readonly StructuralSupportRecord[], edge: StructuralEdgeRecord, likelyFree: readonly string[]): StructuralSupportRecord | null {
   const supportedIds = new Set(likelyFree.length > 0 ? likelyFree : [edge.componentAId, edge.componentBId]); return supports.find((support) => supportedIds.has(support.componentId)) ?? null;

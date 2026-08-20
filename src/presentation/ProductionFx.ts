@@ -155,7 +155,9 @@ export class ProductionFx {
     const impactSignature = collapse?.lastImpactBodyId && collapse.lastImpactImpulse > 0
       ? `${collapse.lastImpactBodyId}:${collapse.lastImpactImpulse.toFixed(3)}`
       : "";
-    if (impactSignature && impactSignature !== this.lastImpactSignature) {
+    if (!impactSignature) {
+      this.lastImpactSignature = "";
+    } else if (impactSignature !== this.lastImpactSignature) {
       this.lastImpactSignature = impactSignature;
       this.spawnImpact(sandbox, collapse.lastImpactBodyId, collapse.lastImpactImpulse);
     }
