@@ -35,6 +35,7 @@
     "smoke:phase9": "node scripts/phase9-smoke.mjs",
     "smoke:phase11": "node scripts/phase11-smoke.mjs",
     "smoke:phase12": "node scripts/phase12-smoke.mjs",
+    "smoke:bug-sweep": "node scripts/bug-sweep-smoke.mjs",
     "verify:phase0": "npm run verify:phase0-regression",
     "verify:phase0-regression": "npm run test:phase0 && npm run build",
     "verify:phase1": "npm run verify:phase1-regression",
@@ -59,7 +60,7 @@
     "verify:phase10-regression": "npm run test:phase10 && npm run build",
     "verify:phase11": "npm run verify:phase11-regression",
     "verify:phase11-regression": "npm run test:phase11 && npm run build",
-    "verify:phase12": "npm run test:phase12 && npm run package:release && npm run smoke:phase12 && npm run smoke:phase9"
+    "verify:phase12": "npm run test:phase12 && npm run package:release && npm run smoke:phase12 && npm run smoke:bug-sweep && npm run smoke:phase9"
   },
   "dependencies": { "@dimforge/rapier3d-compat": "0.19.3", "three": "0.185.0" },
   "devDependencies": { "typescript": "7.0.2", "vite": "8.2.1" }
