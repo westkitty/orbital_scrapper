@@ -2,7 +2,7 @@
 
 project_id: `orbital_scrapper`
 project_name: `Orbital Scrapper`
-revision: 15
+revision: 16
 repository: `westkitty/orbital_scrapper`
 default_branch: `main`
 
@@ -24,6 +24,7 @@ Greenfield physics-driven salvage game governed by `BUILD_CONTRACT.md`, with exe
 - Phase 11 production presentation remains verified after Phase 12 optimization: local procedural production geometry, exact visible structural hardpoints, edge-distributed cockpit HUD, derived scanner/cutter/tether/cargo/impact VFX, and user-enabled vacuum-aware Web Audio without changing simulation authority.
 - Phase 12 verifies release-candidate readiness only for the selected static desktop-Chromium concept target. The recorded CI performance environment is GitHub-hosted Ubuntu + headless Google Chrome + SwiftShader at `1280x900` with reduced motion; it is not evidence for mobile thermals, Safari, Firefox, consumer GPU tiers, native installation, or broader accessibility certification.
 - PR #13 was squash-merged to `main` as `9533e5b905bbdbeec1a613700af745910f61f1b8` after the Phase 12 gate and every Phase 0–11 regression gate passed on the same candidate head.
+- Post-Phase-12 bug-sweep PR #14 was squash-merged to `main` as `530eae5b6553caa3461afd9f63226af1e21f4fc6` after all Phase 0–12 workflows passed on final head `be1bd1ffe5d85d653aaed6a7016634dd9f5e8ffc`. The verified closeout repairs focus-loss/control handoff, live fresh-run application of persisted Tether Reinforcement and Cutter Optics, current-step impact telemetry/repeatable identical-impact VFX, and scanner section attribution after prior detached islands.
 
 ## Artifact contract
 
@@ -108,6 +109,10 @@ Implementation advances one gated phase at a time. A later phase must not depend
 - INV-069: The protected progression key remains `orbital-scrapper-progression-v1`; Phase 12 maintains a synchronized last-known-good companion copy at `orbital-scrapper-progression-v1-backup`. A valid backup may heal a malformed/unsupported primary only without duplicating credits, upgrades, or run accounting.
 - INV-070: Scenario `phase12-endurance-v1` is the selected CI performance gate: at least `300` recorded frame intervals, frame p95 `<= 33.4 ms`, frame p99 `<= 50 ms`, frames over `50 ms` `<= 2%`, and application frame-callback p95 `<= 20 ms`. Thresholds must not be relaxed merely to make a candidate pass.
 - INV-071: Phase 12 presentation-cost optimization remains subordinate to INV-060 and the verified gameplay loop. Lower-cost materials, lower tessellation, and removal of dynamic shadow casting are acceptable only while exact hardpoints, body ownership, readable module identity, and all Phase 0–11 regressions remain green.
+- INV-072: Flight/tool held-key state must clear on window focus loss. Focused buttons retain native Space activation, the first real gameplay key may hand focus back to flight controls, and text-entry controls must suppress gameplay shortcuts rather than leak movement/tool input.
+- INV-073: Persisted run capabilities are resolved into live gameplay only at fresh-run boundaries. Clamp Dampers, Tether Reinforcement, and Cutter Optics must all configure the live cargo/cutter/tether systems for the new run; persistence-only ownership without runtime effect is a regression.
+- INV-074: Collapse impact telemetry describes the current physics step, not a permanently latched prior collision. When no current craft impact exists, impact body/force/impulse telemetry clears, and presentation may re-trigger a later identical impact after an intervening quiet state.
+- INV-075: Scanner prediction for a candidate bridge cut must derive the likely freed section from that connection's own endpoint sections. Unrelated components already detached by prior cuts must not hijack the displayed component, mass, value, or risk attribution for a later cut.
 
 ## Verified working behavior
 
@@ -231,9 +236,26 @@ Verified:
 - final Phase 0–11 regression runs `32365511135`, `32365511245`, `32365511175`, `32365511224`, `32365511141`, `32365511259`, `32365511241`, `32365511269`, `32365511227`, `32365511230`, `32365511557`, and `32365511127` all pass on the same candidate head;
 - PR #13 was squash-merged to `main` as `9533e5b905bbdbeec1a613700af745910f61f1b8`.
 
+### Post-Phase-12 bug-sweep closeout
+
+Verified by `Phase 12 Release Readiness Gate` run `32370799126`, job `96430663150`, with Phase 0–11 regression runs `32370799179`, `32370799150`, `32370799145`, `32370799135`, `32370799161`, `32370799151`, `32370799118`, `32370799121`, `32370799169`, `32370799144`, `32370799142`, and `32370799120` all completed successfully on final head `be1bd1ffe5d85d653aaed6a7016634dd9f5e8ffc`.
+
+Verified:
+
+- ninety of ninety combined tests pass;
+- focus loss clears held flight/tool state; focused buttons retain native Space activation; the first gameplay key hands button focus back to flight; text-entry controls suppress gameplay shortcuts;
+- persisted Clamp Dampers, Tether Reinforcement, and Cutter Optics resolve into the live fresh-run cargo/cutter/tether configuration rather than existing only in save/config tests;
+- live browser capability smoke reports cutter `12.00 m`, tether `105.00 N`, clamp `2.00 m/s`, run `1`;
+- collapse impact telemetry clears when no current craft impact exists, preventing stale impact audio state; a later identical impact can re-use the bounded spark pool after a quiet state;
+- scanner section prediction remains tied to the analyzed connection's endpoints even after an unrelated component has already detached;
+- the unchanged three-run Phase 12 endurance/reduced-motion/save-recovery/performance path passes with `1,727` measured frame intervals, p95 `33.40 ms`, p99 `33.40 ms`, `0.23%` frames over `50 ms`, callback p95 `2.90 ms`, `11` listeners, `34` presentation meshes, `3` completed runs, and `359` credits;
+- the unchanged complete Phase 9 production loop passes afterward with `payout=161`, `credits=11`, clamp `2.00`, run IDs `1->2->3`, and condition `64.3`;
+- release artifact ID `9407096825` and performance-evidence artifact ID `9407097289` were uploaded;
+- PR #14 was squash-merged to `main` as `530eae5b6553caa3461afd9f63226af1e21f4fc6`.
+
 ## Implemented but unverified
 
-None for the completed Phase 0–12 implementation sequence.
+None for the completed Phase 0–12 implementation sequence or the verified post-Phase-12 closeout repairs.
 
 ## Known not-working behavior
 
@@ -241,8 +263,8 @@ None established inside the selected static desktop-Chromium concept-release tar
 
 ## Known observations / deferred maintenance
 
-- The final Phase 12 JavaScript bundle remains approximately `2.855 MB` minified / `999.88 KB` gzip. The measured release target passes despite that size; code splitting remains a future optimization opportunity rather than a Phase 12 blocker.
-- The final CI frame p95 is exactly `33.40 ms`, equal to the declared Phase 12 ceiling. The selected CI target therefore passes with essentially no p95 headroom; future presentation/runtime additions must rerun the matched performance gate rather than assume spare budget.
+- The post-sweep JavaScript bundle is approximately `2,856.49 KB` minified / `1,000.29 KB` gzip. The measured release target still passes; code splitting remains a future optimization opportunity rather than a closeout blocker.
+- The latest CI frame p95 remains exactly `33.40 ms`, equal to the declared Phase 12 ceiling. The selected CI target therefore still passes with essentially no p95 headroom; future presentation/runtime additions must rerun the matched performance gate rather than assume spare budget.
 - Rapier emits an initialization deprecation warning in tests. Behavior is verified; API cleanup remains deferred.
 - GitHub Actions warns about deprecated internal Node 20 runtimes in `actions/checkout@v4`, `actions/setup-node@v4`, and `actions/upload-artifact@v4`; hosted runners force Node 24 and the gates pass. CI-action maintenance is deferred.
 - Phase 1 handling constants remain proof values, not final tuning.
@@ -259,8 +281,9 @@ None established inside the selected static desktop-Chromium concept-release tar
 - The current player-facing dock still exposes the original Clamp Dampers purchase path. Tether Reinforcement and Cutter Optics are verified persisted capability paths/configuration effects but do not yet have equivalent production-facing purchase controls.
 - Phase 11/12 production assets remain local procedural geometry and generated Web Audio proof tones. They establish the production direction and verified concept-release integration contract but do not settle whether later authored models/textures/recordings replace or supplement them.
 - Browser autoplay rules require the player to explicitly enable the verified Web Audio presentation layer; muted operation remains fully playable.
-- The final Phase 12 integrated Phase 9 regression settled at `66.4%` condition and `166` proof-unit payout. This validates release compatibility with gameplay-derived value loss, not final economy/condition balance.
+- The final Phase 12 integrated Phase 9 regression settled at `66.4%` condition and `166` proof-unit payout. The later bug-sweep regression settled at `64.3%` / `161` proof units. Both validate compatibility with gameplay-derived value loss, not final economy/condition balance.
 - Phase 12 gate history: the first two failures were harness defects involving document-reload loss of reduced-motion/instrumentation state; after the live-target harness was corrected, the third run exposed a real performance blocker at frame p95 `50.10 ms` against the locked `33.4 ms` ceiling. The final bounded presentation optimization reduced tessellation/material/shadow cost without changing physics/hardpoint authority and the fourth run passed without relaxing thresholds.
+- Post-Phase-12 bug-sweep gate history: the first closeout Phase 12 run exposed a real input ownership edge case after enabling audio: focused button semantics correctly preserved native Space activation but then trapped later flight braking. The bounded repair kept native Space on focused buttons, handed focus back on the first real gameplay key, and kept text-entry controls protected; the rerun passed all thirteen workflows.
 - Phase 11 gate history includes an out-of-range VFX test fixture and a Chrome-profile cleanup race; both were harness/test-only repairs and did not change production mechanics.
 - Phase 10's first breadth gate failure was a test-fixture issue caused by advancing tether impulses without advancing Rapier; production tether constants were not changed.
 - Phase 8 gate history includes an unsafe long browser thrust hold, a transient no-DevTools startup, and an overstrict pristine-cargo assumption; all were repaired without weakening the physical contract.
@@ -326,6 +349,10 @@ None established inside the selected static desktop-Chromium concept-release tar
 - Phase 12 save resilience: primary `orbital-scrapper-progression-v1` plus synchronized last-known-good `orbital-scrapper-progression-v1-backup`
 - Phase 12 release package: `npm run package:release` -> `release/orbital-scrapper-web/` containing production files plus `RELEASE_MANIFEST.json` and `README.txt`; CI uploads this directory and the performance capture as release evidence
 - Phase 12 production-rendering optimization: lower-cost `MeshLambertMaterial`, reduced primitive tessellation, and disabled dynamic shadow casting preserve exact hardpoints/body ownership while reducing the reference presentation baseline to `34` meshes
+- Post-Phase-12 input ownership: blur clears held state; native button Space is preserved; gameplay keys may return focus to flight controls; text-entry controls remain protected from gameplay shortcuts.
+- Post-Phase-12 run capability resolution: all three persisted proof upgrades are resolved at fresh-run boundaries into the live cargo/cutter/tether systems.
+- Post-Phase-12 impact presentation: impact diagnostics clear without a current collision and identical later impacts can produce a fresh bounded effect after an intervening quiet state.
+- Post-Phase-12 scanner attribution: likely freed sections are derived from the analyzed connection's endpoint sections rather than unrelated already-detached islands.
 
 ## Pending work
 
@@ -349,31 +376,32 @@ Any additional feature phase, broader platform release, production-content expan
 12. Phase 11 — Production readability, visual assets, audio, and feel — **verified**
 13. Phase 12 — Performance, endurance, accessibility, and release readiness — **verified**
 
-The current staged plan is complete. A future phase requires an explicit new authorized plan and must preserve the verified Phase 0–12 invariants.
+The current staged plan is complete. A future phase requires an explicit new authorized plan and must preserve the verified Phase 0–12 invariants plus the post-Phase-12 closeout invariants INV-072 through INV-075.
 
 ## Validation matrix
 
 | ID | Claim | State | Required proof |
 |---|---|---|---|
-| VAL-000 | Runtime foundation is suitable | verified | Phase 0 proof `32326833764`; latest regression `32365511135` |
-| VAL-001 | Full salvage loop works | verified | Phase 9 proof `32345788643`; final production Chrome regression inside Phase 12 run `32365511137` |
-| VAL-002 | Structural graph tracks physical cuts | verified | Phase 5 proof `32337246778`; latest regression `32365511259` |
-| VAL-003 | Dangerous cut produces simulated cascade | verified | Phase 7 proof `32342058172`; latest regression `32365511269` |
-| VAL-004 | Tether changes dangerous outcome | verified | Phase 4 proof `32333422171`; latest regression `32365511141`; Phase 10 capability proof preserved |
-| VAL-005 | Reset/recovery is clean | verified through Phase 12 | Phase 0–12 lifecycle/reset tests plus three-run endurance checkpoints and final full-loop regression |
-| VAL-006 | Progression changes next run | verified | Phase 9 Clamp Dampers proof plus Phase 10 persisted Tether Reinforcement/Cutter Optics capability tests plus Phase 12 backup/reload proof |
-| VAL-007 | Phase gates are respected | verified through Phase 12 | Phase 12 gate plus every Phase 0–11 regression passed on the same final head before merge |
-| VAL-008 | Salvage craft flight is controllable | verified | Phase 1 proof `32328133794`; latest regression `32365511245` |
-| VAL-009 | Modular wreck remains coherent and stable | verified across Phase 10 templates | Phase 2 proof `32328786755`; Phase 10 breadth proof; Phase 12 body-budget/regression proof |
-| VAL-010 | Cutting removes intended physical connection and produces natural separation | verified | Phase 3 proof `32331609212`; latest regression `32365511224`; final production loop |
-| VAL-011 | Tether manipulation/bracing materially change physical outcomes | verified | Phase 4 proof `32333422171`; latest regression `32365511141`; final production loop |
-| VAL-012 | Structural graph mirrors live topology/support state | verified | Phase 5 proof `32337246778`; latest regression `32365511259`; three-run exact graph checkpoints |
-| VAL-013 | Scanner explains current structural risk without stale/oracle behavior | verified | Phase 6 proof `32338441743`; latest regression `32365511241`; production scanner regression |
-| VAL-014 | Structural mistakes escalate into readable survivable physical danger | verified | Phase 7 proof `32342058172`; latest regression `32365511269`; production warning/audio path preserved |
-| VAL-015 | Salvage can be physically recovered, condition-valued, secured, returned, and settled | verified | Phase 8 proof `32343609183`; latest regression `32365511227`; final Phase 12 complete production loop |
-| VAL-016 | Content/progression breadth works across varied wrecks without bespoke exceptions | verified | Phase 10 proof `32352461479`; latest regression `32365511557` |
-| VAL-017 | Production presentation improves readability without obscuring the structural game | verified | Phase 11 proof `32356960223`; latest regression `32365511127`; Phase 12 exact hardpoint/body-ownership tests and full-loop proof after performance optimization |
-| VAL-018 | Representative build is performance/endurance/accessibility/release ready | verified for selected static desktop-Chromium concept target | Phase 12 run `32365511137`, job `96414045259`: 83/83 tests, deterministic package, three-run reduced-motion endurance, last-known-good save recovery, 1,695-frame performance capture within locked budgets, final Phase 9 production loop, and all Phase 0–11 regressions green |
+| VAL-000 | Runtime foundation is suitable | verified | Phase 0 proof `32326833764`; latest closeout regression `32370799179` |
+| VAL-001 | Full salvage loop works | verified | Phase 9 proof `32345788643`; latest production Chrome regression inside closeout Phase 12 run `32370799126` |
+| VAL-002 | Structural graph tracks physical cuts | verified | Phase 5 proof `32337246778`; latest closeout regression `32370799151` |
+| VAL-003 | Dangerous cut produces simulated cascade | verified | Phase 7 proof `32342058172`; latest closeout regression `32370799121` |
+| VAL-004 | Tether changes dangerous outcome | verified | Phase 4 proof `32333422171`; latest closeout regression `32370799161`; live upgraded tether capability also verified in closeout smoke |
+| VAL-005 | Reset/recovery is clean | verified through closeout | Phase 0–12 lifecycle/reset tests plus latest three-run endurance checkpoints and final full-loop regression |
+| VAL-006 | Progression changes next run | verified | Phase 9 Clamp Dampers proof; Phase 10 persisted Tether Reinforcement/Cutter Optics tests; closeout live browser capability smoke proves all three are applied to the fresh-run runtime |
+| VAL-007 | Phase gates are respected | verified through closeout | Phase 12 gate plus every Phase 0–11 regression passed on the same final closeout head before PR #14 merge |
+| VAL-008 | Salvage craft flight is controllable | verified | Phase 1 proof `32328133794`; latest closeout regression `32370799150`, including focus-loss/control-handoff fixtures |
+| VAL-009 | Modular wreck remains coherent and stable | verified across Phase 10 templates | Phase 2 proof `32328786755`; Phase 10 breadth proof; latest closeout body-budget/regression proof |
+| VAL-010 | Cutting removes intended physical connection and produces natural separation | verified | Phase 3 proof `32331609212`; latest closeout regression `32370799135`; final production loop |
+| VAL-011 | Tether manipulation/bracing materially change physical outcomes | verified | Phase 4 proof `32333422171`; latest closeout regression `32370799161`; final production loop |
+| VAL-012 | Structural graph mirrors live topology/support state | verified | Phase 5 proof `32337246778`; latest closeout regression `32370799151`; three-run exact graph checkpoints |
+| VAL-013 | Scanner explains current structural risk without stale/oracle behavior | verified | Phase 6 proof `32338441743`; latest closeout regression `32370799118`, including endpoint-scoped attribution after unrelated prior detachment |
+| VAL-014 | Structural mistakes escalate into readable survivable physical danger | verified | Phase 7 proof `32342058172`; latest closeout regression `32370799121`; current-step impact telemetry regression |
+| VAL-015 | Salvage can be physically recovered, condition-valued, secured, returned, and settled | verified | Phase 8 proof `32343609183`; latest closeout regression `32370799169`; final closeout complete production loop |
+| VAL-016 | Content/progression breadth works across varied wrecks without bespoke exceptions | verified | Phase 10 proof `32352461479`; latest closeout regression `32370799142` |
+| VAL-017 | Production presentation improves readability without obscuring the structural game | verified | Phase 11 proof `32356960223`; latest closeout regression `32370799120`; repeatable-impact VFX and full-loop proof |
+| VAL-018 | Representative build is performance/endurance/accessibility/release ready | verified for selected static desktop-Chromium concept target | Closeout Phase 12 run `32370799126`, job `96430663150`: 90/90 tests, deterministic package, live persisted-capability smoke, three-run reduced-motion endurance, save recovery, 1,727-frame performance capture within locked budgets, final Phase 9 production loop, all Phase 0–11 regressions green |
+| VAL-019 | Post-Phase-12 bug-sweep repairs are regression-protected | verified | Focus/input, runtime-upgrade, impact lifecycle/VFX, and scanner-attribution fixtures plus closeout Phase 12 browser smoke; PR #14 merged as `530eae5b6553caa3461afd9f63226af1e21f4fc6` |
 
 ## Prohibitions
 
@@ -395,16 +423,24 @@ The current staged plan is complete. A future phase requires an explicit new aut
 - Do not settle before secure cargo and physical extraction.
 - Do not credit the same run twice, credit stale run IDs, settle a failed run, or let a failed run erase prior progression.
 - Do not apply newly purchased capability upgrades retroactively to the completed/active run; resolve their effects at a fresh-run boundary when integrated into a player run.
+- Do not let persisted Tether Reinforcement or Cutter Optics ownership exist without configuring the corresponding live fresh-run systems.
 - Do not use capability upgrades as simple payout multipliers.
 - Do not add bespoke tool exceptions for individual wreck templates/modules or replace varied physical behavior with scripted collapse sequences.
 - Do not let visual assets move or redefine stable physics pivots, colliders, component IDs, or attachment points merely to suit artwork.
 - Do not make exterior vacuum events sound like ordinary air; use justified conduction/instrumentation/cockpit/radio/music channels.
 - Do not make risk, hazard direction, tether load, cutter progress, or cargo condition dependent on color alone.
 - Do not let a production overlay cover the center worksite/reticle or hide the physical relationship it describes.
+- Do not let a lost browser/window keyup leave flight, brake, cutter, or tether input held; do not steal native Space activation from a focused button; do not route gameplay shortcuts through text-entry controls.
+- Do not keep impact body/force/impulse telemetry latched after a step with no current craft impact, and do not permanently suppress a later identical impact VFX event after a quiet interval.
+- Do not let unrelated already-detached graph islands determine the displayed mass/value/risk attribution for a different candidate cut.
 - Do not infer performance/release readiness from build success, short smoke tests, or current bundle size alone.
 - Do not relax the Phase 12 locked performance thresholds to admit a future candidate; optimize or explicitly revise the release contract with new authority.
 
 ## Revision history
+
+### Revision 16 — 2026-08-23
+
+Post-Phase-12 bug-sweep closeout passed `Phase 12 Release Readiness Gate` run `32370799126`, job `96430663150`, while Phase 0–11 regression runs `32370799179`, `32370799150`, `32370799145`, `32370799135`, `32370799161`, `32370799151`, `32370799118`, `32370799121`, `32370799169`, `32370799144`, `32370799142`, and `32370799120` all completed successfully on final head `be1bd1ffe5d85d653aaed6a7016634dd9f5e8ffc`. Ninety of ninety combined tests passed. Promoted four evidence-backed repairs to verified state: focus-loss/button-to-gameplay/text-entry input ownership; live fresh-run application of persisted Clamp Dampers/Tether Reinforcement/Cutter Optics; current-step impact telemetry with repeatable identical-impact VFX after a quiet interval; and connection-endpoint-scoped scanner section attribution after unrelated prior detachment. The first closeout Phase 12 run caught a real button-focus/gameplay handoff defect after audio enable; a bounded repair preserved native Space activation while returning focus on real gameplay keys, and the full workflow set was rerun. Final Chrome endurance proof recorded `1,727` frame intervals, p95 `33.40 ms`, p99 `33.40 ms`, `0.23%` frames over `50 ms`, callback p95 `2.90 ms`, `11` listeners, `34` presentation meshes, `3` completed runs, and `359` credits. The dedicated capability smoke reported cutter `12.00 m`, tether `105.00 N`, clamp `2.00 m/s`; the unchanged full Phase 9 production loop reported `payout=161`, `credits=11`, runs `1->2->3`, and condition `64.3`. Release artifact ID `9407096825` and performance artifact ID `9407097289` were uploaded. PR #14 was squash-merged to `main` as `530eae5b6553caa3461afd9f63226af1e21f4fc6`. The implementation plan remains complete and no Phase 13 is authorized.
 
 ### Revision 15 — 2026-08-20
 
