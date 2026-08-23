@@ -2,7 +2,9 @@ import type { FlightInput } from "../flight/FlightController.js";
 
 export type FlightKeyboardTarget = {
   addEventListener(type: "keydown" | "keyup", listener: (event: KeyboardEvent) => void): void;
+  addEventListener(type: "blur", listener: (event: Event) => void): void;
   removeEventListener(type: "keydown" | "keyup", listener: (event: KeyboardEvent) => void): void;
+  removeEventListener(type: "blur", listener: (event: Event) => void): void;
 };
 
 export type FlightInputActions = {
@@ -14,6 +16,30 @@ const CONTROL_CODES = new Set([
   "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
   "KeyQ", "KeyE", "Space", "KeyC", "KeyT", "KeyX",
 ]);
+
+type KeyboardEventTarget = EventTarget & {
+  tagName?: unknown;
+  isContentEditable?: boolean;
+  blur?: () => void;
+};
+
+function targetTagName(target: EventTarget | null): string {
+  if (!target || typeof target !== "object") return "";
+  const tagName = (target as KeyboardEventTarget).tagName;
+  return typeof tagName === "string" ? tagName.toUpperCase() : "";
+}
+
+function isTextEntryTarget(target: EventTarget | null): boolean {
+  if (!target || typeof target !== "object") return false;
+  const element = target as KeyboardEventTarget;
+  if (element.isContentEditable) return true;
+  const tagName = targetTagName(target);
+  return tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT";
+}
+
+function preservesNativeButtonKey(target: EventTarget | null, code: string): boolean {
+  return targetTagName(target) === "BUTTON" && code === "Space";
+}
 
 export class FlightInputBindings {
   private readonly pressed = new Set<string>();
@@ -28,6 +54,7 @@ export class FlightInputBindings {
     if (this.attached) return;
     this.target.addEventListener("keydown", this.onKeyDown);
     this.target.addEventListener("keyup", this.onKeyUp);
+    this.target.addEventListener("blur", this.onBlur);
     this.attached = true;
   }
 
@@ -35,6 +62,7 @@ export class FlightInputBindings {
     if (!this.attached) return;
     this.target.removeEventListener("keydown", this.onKeyDown);
     this.target.removeEventListener("keyup", this.onKeyUp);
+    this.target.removeEventListener("blur", this.onBlur);
     this.pressed.clear();
     this.attached = false;
   }
@@ -73,6 +101,12 @@ export class FlightInputBindings {
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
     if (!CONTROL_CODES.has(event.code)) return;
+    if (isTextEntryTarget(event.target) || preservesNativeButtonKey(event.target, event.code)) return;
+
+    if (targetTagName(event.target) === "BUTTON") {
+      (event.target as KeyboardEventTarget).blur?.();
+    }
+
     event.preventDefault?.();
     if (event.code === "KeyX") {
       if (!event.repeat) this.actions.reset();
@@ -83,7 +117,13 @@ export class FlightInputBindings {
 
   private readonly onKeyUp = (event: KeyboardEvent): void => {
     if (!CONTROL_CODES.has(event.code)) return;
-    event.preventDefault?.();
     this.pressed.delete(event.code);
+    if (!isTextEntryTarget(event.target) && !preservesNativeButtonKey(event.target, event.code)) {
+      event.preventDefault?.();
+    }
+  };
+
+  private readonly onBlur = (): void => {
+    this.pressed.clear();
   };
 }

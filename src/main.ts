@@ -22,6 +22,7 @@ import {
 } from "./progression/ProgressionSystem.js";
 import { FixedStepLoop } from "./runtime/FixedStepLoop.js";
 import { FlightInputBindings } from "./runtime/FlightInputBindings.js";
+import { applyRunCapabilities, resolveRunCapabilities } from "./runtime/RunCapabilities.js";
 import { SCANNER_RANGE_METERS, ScannerSystem } from "./scanner/ScannerSystem.js";
 import { StructuralGraph } from "./structure/StructuralGraph.js";
 import { TETHER_RANGE_METERS, TetherSystem } from "./tether/TetherSystem.js";
@@ -214,14 +215,15 @@ const starfield = createStarfield();
 scene.add(starfield);
 
 const progression = new ProgressionSystem(window.localStorage);
+let runCapabilities = resolveRunCapabilities(progression);
 const sandbox = await WreckSandbox.create();
 const controller = new FlightController();
-const cutter = new CuttingSystem();
-const tether = new TetherSystem();
+const cutter = new CuttingSystem({ rangeMeters: runCapabilities.cutterRangeMeters });
+const tether = new TetherSystem({ maxTensionNewtons: runCapabilities.tetherMaxTensionNewtons });
 const graph = new StructuralGraph();
 const scanner = new ScannerSystem();
 const collapse = new CollapseSystem();
-let currentCaptureLimit = progression.getCaptureSpeedLimit(CARGO_MAX_RELATIVE_SPEED_METERS_PER_SECOND);
+let currentCaptureLimit = runCapabilities.captureSpeedLimit;
 const cargo = new CargoSystem({ maxCaptureRelativeSpeed: currentCaptureLimit });
 graph.sync(sandbox, tether.getDiagnostics(sandbox));
 collapse.step(sandbox, graph);
@@ -303,7 +305,9 @@ function handleBuyUpgrade() {
 function handleLaunchNextRun() {
   if (runMode !== "dock") return;
   activeRunId = progression.beginRun();
-  currentCaptureLimit = progression.getCaptureSpeedLimit(CARGO_MAX_RELATIVE_SPEED_METERS_PER_SECOND);
+  runCapabilities = resolveRunCapabilities(progression);
+  currentCaptureLimit = runCapabilities.captureSpeedLimit;
+  applyRunCapabilities(runCapabilities, cargo, cutter, tether);
   settlementApplied = false;
   failureApplied = false;
   runMode = "field";
@@ -501,7 +505,7 @@ function updateDiagnostics() {
     status.textContent = "Scanner information is advisory. Visible hardpoints and live marker geometry identify the physical relationship being evaluated.";
     document.querySelector("#hud-objective").textContent = "Choose the cut from current structure, value, and escape room.";
   } else if (diagnostics.distanceToWreck > SCANNER_RANGE_METERS) {
-    course.textContent = `Approach the wreck. Scanner ${SCANNER_RANGE_METERS.toFixed(0)} m; cutter ${CUTTER_RANGE_METERS.toFixed(0)} m; tether ${TETHER_RANGE_METERS.toFixed(0)} m.`;
+    course.textContent = `Approach the wreck. Scanner ${SCANNER_RANGE_METERS.toFixed(0)} m; cutter ${cut.rangeMeters.toFixed(0)} m; tether ${TETHER_RANGE_METERS.toFixed(0)} m.`;
     status.textContent = "Begin the next salvage decision from current physical structure.";
     document.querySelector("#hud-objective").textContent = "Close to scanner range and identify a recoverable section.";
   } else {
@@ -532,6 +536,8 @@ function updateDiagnostics() {
   document.body.dataset.audioSeverity = updatedAudio.severityGain.toFixed(3);
   document.body.dataset.presentationMeshes = String(presentationMetrics.detailMeshes);
   document.body.dataset.fxRoot = updatedFx.rootName;
+  document.body.dataset.cutterRange = cut.rangeMeters.toFixed(2);
+  document.body.dataset.tetherMaxTension = tetherDiagnostics.maxTensionNewtons.toFixed(2);
 }
 
 function frame(now) {
