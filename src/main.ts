@@ -18,14 +18,18 @@ import { FlightScenePresenter } from "./presentation/FlightScenePresenter.js";
 import {
   CLAMP_DAMPERS_COST_UNITS,
   CLAMP_DAMPERS_MAX_CAPTURE_SPEED_METERS_PER_SECOND,
+  CUTTER_OPTICS_COST_UNITS,
+  CUTTER_OPTICS_RANGE_METERS,
   ProgressionSystem,
+  TETHER_REINFORCEMENT_COST_UNITS,
+  TETHER_REINFORCEMENT_MAX_TENSION_NEWTONS,
 } from "./progression/ProgressionSystem.js";
 import { FixedStepLoop } from "./runtime/FixedStepLoop.js";
 import { FlightInputBindings } from "./runtime/FlightInputBindings.js";
 import { applyRunCapabilities, resolveRunCapabilities } from "./runtime/RunCapabilities.js";
 import { SCANNER_RANGE_METERS, ScannerSystem } from "./scanner/ScannerSystem.js";
 import { StructuralGraph } from "./structure/StructuralGraph.js";
-import { TETHER_RANGE_METERS, TetherSystem } from "./tether/TetherSystem.js";
+import { TETHER_MAX_TENSION_NEWTONS, TETHER_RANGE_METERS, TetherSystem } from "./tether/TetherSystem.js";
 
 const app = document.querySelector("#app");
 if (!app) throw new Error("Missing #app root");
@@ -142,7 +146,9 @@ app.innerHTML = `
       <p class="eyebrow">PREPARATION DOCK</p>
       <h1>Salvage secured.</h1>
       <p id="dock-summary">Return with salvage to prepare the next run.</p>
-      <button id="buy-clamp-dampers" type="button">Buy Clamp Dampers — ${CLAMP_DAMPERS_COST_UNITS} units</button>
+      <button id="buy-clamp-dampers" type="button">Buy Clamp Dampers — ${CLAMP_DAMPERS_COST_UNITS} units · ${CARGO_MAX_RELATIVE_SPEED_METERS_PER_SECOND.toFixed(2)} → ${CLAMP_DAMPERS_MAX_CAPTURE_SPEED_METERS_PER_SECOND.toFixed(2)} m/s</button>
+      <button id="buy-tether-reinforcement" type="button">Buy Tether Reinforcement — ${TETHER_REINFORCEMENT_COST_UNITS} units · ${TETHER_MAX_TENSION_NEWTONS.toFixed(0)} → ${TETHER_REINFORCEMENT_MAX_TENSION_NEWTONS.toFixed(0)} N</button>
+      <button id="buy-cutter-optics" type="button">Buy Cutter Optics — ${CUTTER_OPTICS_COST_UNITS} units · ${CUTTER_RANGE_METERS.toFixed(0)} → ${CUTTER_OPTICS_RANGE_METERS.toFixed(0)} m</button>
       <button id="launch-next-run" type="button">Launch next salvage run</button>
     </aside>
   </main>
@@ -152,6 +158,8 @@ const viewport = app.querySelector(".viewport");
 const resetButton = document.querySelector("#reset");
 const audioToggle = document.querySelector("#audio-toggle");
 const buyUpgradeButton = document.querySelector("#buy-clamp-dampers");
+const buyTetherUpgradeButton = document.querySelector("#buy-tether-reinforcement");
+const buyCutterUpgradeButton = document.querySelector("#buy-cutter-optics");
 const launchNextRunButton = document.querySelector("#launch-next-run");
 const dockPanel = document.querySelector("#dock-panel");
 const dockSummary = document.querySelector("#dock-summary");
@@ -291,14 +299,19 @@ audioToggle.addEventListener("click", handleAudioToggle);
 
 function handleBuyUpgrade() {
   if (runMode !== "dock") return;
-  const result = progression.purchaseClampDampers();
-  if (result.reason === "purchased") {
-    dockSummary.textContent = `Clamp Dampers purchased. Next-run capture ceiling: ${CLAMP_DAMPERS_MAX_CAPTURE_SPEED_METERS_PER_SECOND.toFixed(2)} m/s.`;
-  } else if (result.reason === "already-owned") {
-    dockSummary.textContent = "Clamp Dampers already installed.";
-  } else {
-    dockSummary.textContent = `Need ${CLAMP_DAMPERS_COST_UNITS} units for Clamp Dampers.`;
-  }
+  progression.purchaseClampDampers();
+  updateDiagnostics();
+}
+
+function handleBuyTetherUpgrade() {
+  if (runMode !== "dock") return;
+  progression.purchaseTetherReinforcement();
+  updateDiagnostics();
+}
+
+function handleBuyCutterUpgrade() {
+  if (runMode !== "dock") return;
+  progression.purchaseCutterOptics();
   updateDiagnostics();
 }
 
@@ -317,6 +330,8 @@ function handleLaunchNextRun() {
 }
 
 buyUpgradeButton.addEventListener("click", handleBuyUpgrade);
+buyTetherUpgradeButton.addEventListener("click", handleBuyTetherUpgrade);
+buyCutterUpgradeButton.addEventListener("click", handleBuyCutterUpgrade);
 launchNextRunButton.addEventListener("click", handleLaunchNextRun);
 
 function resize() {
@@ -449,17 +464,34 @@ function updateDiagnostics() {
     || progressionDiagnostics.upgrades.clampDampers
     || progressionDiagnostics.credits < CLAMP_DAMPERS_COST_UNITS;
   buyUpgradeButton.textContent = progressionDiagnostics.upgrades.clampDampers
-    ? "Clamp Dampers installed"
-    : `Buy Clamp Dampers — ${CLAMP_DAMPERS_COST_UNITS} units`;
+    ? `Clamp Dampers installed · ${CLAMP_DAMPERS_MAX_CAPTURE_SPEED_METERS_PER_SECOND.toFixed(2)} m/s capture ceiling`
+    : `Buy Clamp Dampers — ${CLAMP_DAMPERS_COST_UNITS} units · ${CARGO_MAX_RELATIVE_SPEED_METERS_PER_SECOND.toFixed(2)} → ${CLAMP_DAMPERS_MAX_CAPTURE_SPEED_METERS_PER_SECOND.toFixed(2)} m/s`;
+  buyTetherUpgradeButton.disabled = runMode !== "dock"
+    || progressionDiagnostics.upgrades.tetherReinforcement
+    || progressionDiagnostics.credits < TETHER_REINFORCEMENT_COST_UNITS;
+  buyTetherUpgradeButton.textContent = progressionDiagnostics.upgrades.tetherReinforcement
+    ? `Tether Reinforcement installed · ${TETHER_REINFORCEMENT_MAX_TENSION_NEWTONS.toFixed(0)} N limit`
+    : `Buy Tether Reinforcement — ${TETHER_REINFORCEMENT_COST_UNITS} units · ${TETHER_MAX_TENSION_NEWTONS.toFixed(0)} → ${TETHER_REINFORCEMENT_MAX_TENSION_NEWTONS.toFixed(0)} N`;
+  buyCutterUpgradeButton.disabled = runMode !== "dock"
+    || progressionDiagnostics.upgrades.cutterOptics
+    || progressionDiagnostics.credits < CUTTER_OPTICS_COST_UNITS;
+  buyCutterUpgradeButton.textContent = progressionDiagnostics.upgrades.cutterOptics
+    ? `Cutter Optics installed · ${CUTTER_OPTICS_RANGE_METERS.toFixed(0)} m range`
+    : `Buy Cutter Optics — ${CUTTER_OPTICS_COST_UNITS} units · ${CUTTER_RANGE_METERS.toFixed(0)} → ${CUTTER_OPTICS_RANGE_METERS.toFixed(0)} m`;
   launchNextRunButton.disabled = runMode !== "dock";
 
   if (runMode === "dock") {
+    const installedUpgradeCount = [
+      progressionDiagnostics.upgrades.clampDampers,
+      progressionDiagnostics.upgrades.tetherReinforcement,
+      progressionDiagnostics.upgrades.cutterOptics,
+    ].filter(Boolean).length;
     if (dockReason === "settled") {
-      dockSummary.textContent = progressionDiagnostics.upgrades.clampDampers
-        ? `Settlement banked. Clamp Dampers are installed; launch the next run with a ${CLAMP_DAMPERS_MAX_CAPTURE_SPEED_METERS_PER_SECOND.toFixed(2)} m/s capture ceiling.`
-        : `Settlement banked. Buy Clamp Dampers for ${CLAMP_DAMPERS_COST_UNITS} units, then launch the next run.`;
+      dockSummary.textContent = installedUpgradeCount === 3
+        ? "Settlement banked. All capability upgrades are installed; launch a fresh run to use the complete loadout."
+        : `Settlement banked. ${progressionDiagnostics.credits} units available. Choose any affordable capability upgrade; purchases apply when a fresh run launches.`;
     } else if (dockReason === "recovered") {
-      dockSummary.textContent = "Failed run recovered cleanly. Persistent credits and installed upgrades are intact; launch a fresh run when ready.";
+      dockSummary.textContent = `Failed run recovered cleanly. ${progressionDiagnostics.credits} units remain available; installed upgrades are intact and any new purchase applies on the next launch.`;
     }
   }
 
@@ -479,9 +511,7 @@ function updateDiagnostics() {
     status.textContent = "Failure recorded once. Progression remains separate from the continuing Rapier simulation.";
     document.querySelector("#hud-objective").textContent = "Hull lost. Recover to dock when the field is safe.";
   } else if (runMode === "dock") {
-    course.textContent = progressionDiagnostics.upgrades.clampDampers
-      ? "Launch the next run. The installed dampers will apply only to the fresh run's clamp configuration."
-      : `Spend ${CLAMP_DAMPERS_COST_UNITS} units on Clamp Dampers, then launch the next run.`;
+    course.textContent = "Preparation dock: choose any affordable capability upgrades, then launch. New purchases apply only to the fresh run.";
     status.textContent = "Preparation state: physics is paused; persistent progression is visible and actionable.";
     document.querySelector("#hud-objective").textContent = "Settlement complete. Prepare the next salvage run.";
   } else if (cargoDiagnostics.captureState === "blocked-speed") {
@@ -604,6 +634,8 @@ window.addEventListener("beforeunload", () => {
   resetButton.removeEventListener("click", handleResetAction);
   audioToggle.removeEventListener("click", handleAudioToggle);
   buyUpgradeButton.removeEventListener("click", handleBuyUpgrade);
+  buyTetherUpgradeButton.removeEventListener("click", handleBuyTetherUpgrade);
+  buyCutterUpgradeButton.removeEventListener("click", handleBuyCutterUpgrade);
   launchNextRunButton.removeEventListener("click", handleLaunchNextRun);
   presenter.dispose();
   fx.dispose();
