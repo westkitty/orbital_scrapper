@@ -1,0 +1,26 @@
+name: Post-release Playtest Readiness Gate
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-post-release:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Use Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.22.0
+      - name: Install exact declared dependencies
+        run: npm install --no-audit --no-fund
+      - name: Verify resolved core versions
+        run: npm ls three @dimforge/rapier3d-compat vite typescript
+      - name: Verify post-release playtest readiness
+        run: npm run verify:post-release
